@@ -1022,13 +1022,11 @@ GOTO:EOF
 
 	:updater-no
 		DEL /Q %CD%\version.bat
-		pause
 		exit /b
 		
 	:updater-yes
 		DEL /Q %CD%\version.bat
 		bitsadmin.exe /transfer "Download" %downloadlink% %CD%\VaultBackup.bat
-		pause
 		start "" "%~f0"
 		exit
 
