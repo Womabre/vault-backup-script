@@ -1027,8 +1027,7 @@ GOTO:EOF
 	:updater-yes
 		DEL /Q %CD%\version.bat
 		bitsadmin.exe /transfer "Download" %downloadlink% %CD%\VaultBackup.bat
-		start "" "%~f0"
-		exit
+		exit /b
 
 
 
