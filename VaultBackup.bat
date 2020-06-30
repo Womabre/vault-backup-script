@@ -10,6 +10,7 @@
 ::					- Added external settings file (BackupSettings.bat)
 :: Version 1.2.0 - By Wouter Breedveld, Cadac Group B.V., 30-06-2020
 ::					- Added Auto-update
+::					- Added Windows Notifications
 
 
 
@@ -174,7 +175,7 @@ IF %sizeGb%+2 GEQ %freeBackUpDrive% (
 	if "%EnableMail%"=="Yes" (
 		"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectFail% /b %BodyFail% /html
 	)
-	call :SendNotification "%CompanyName% Vault Backup Failed! Not enough free space."
+	call :SendNotification "%CompanyName% Vault Backup Failed! Not enough free space." "Autodesk Vault" "Error"
 	call :getTime now & ECHO [!now!] - Closing window in 10 minutes & ECHO [!now!] - Closing window in 10 minutes>>%ScriptLog%
 	timeout 600
 	GOTO :QUIT
@@ -312,7 +313,7 @@ IF %successbool% EQU 1 (
 	if "%EnableMail%"=="Yes" (
 		"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectSuccess% /a %Log%^|%ScriptLog% /b %BodySuccess% /html
 	)
-	call :SendNotification "%CompanyName% Vault Backup Successfull!"
+	call :SendNotification "%CompanyName% Vault Backup Successfull!" "Autodesk Vault" "Information"
 	call :getTime now & ECHO [!now!] - Closing window in 10 minutes & ECHO [!now!] - Closing window in 10 minutes>>%ScriptLog%
 	timeout 600
 	GOTO :QUIT
@@ -324,7 +325,7 @@ IF %successbool% EQU 1 (
 		"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectFail% /a %Log%^|%ScriptLog% /b %BodyFail% /html
 	)
 	call :SendEmail %SubjectFail% %BodyFail%
-	call :SendNotification "%CompanyName% Vault Backup Failed!"
+	call :SendNotification "%CompanyName% Vault Backup Failed!" "Autodesk Vault" "Error"
 	call :getTime now &	ECHO [!now!] -  Closing window in 10 minutes & ECHO [!now!] - Closing window in 10 minutes>>%ScriptLog%
 	timeout 600
 	GOTO :QUIT
@@ -423,6 +424,7 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	FOR /f "delims=::1: tokens=*" %%A IN ('findstr /b ::1: "%~f0"') DO @ECHO %Purple% %%A
 	ECHO %Red%============================================================================================================================================================
 	ECHO %White%No Vault installed! Exiting... & ECHO No Vault installed! Exiting...>>%ScriptLog%
+	call :SendNotification "%CompanyName% - No Vault installeed" "Autodesk Vault" "Warning"
 	timeout 30
 	GOTO :QUIT
 	
@@ -780,7 +782,7 @@ GOTO:EOF
 		exit /b
 	)
 
-:SendNotification <Message>
+:SendNotification <Message> <Title> <Icon>
 	if "%EnableTelegram%"=="Yes" (
 		endlocal
 		curl -s -X POST https://api.telegram.org/bot%TelegramToken%/sendMessage -d chat_id=%TelegramChatID% -d text="%~1" > nul 2> nul
@@ -793,6 +795,16 @@ GOTO:EOF
 		curl --form-string "token="%PushOverToken%"" --form-string "user="%PushOverUser%"" --form-string "html=1" --form-string "message=%~1" --form-string "title=%CompanyName% - Vault Server" --form-string "priority=-1" https://api.pushover.net/1/messages.json > nul 2> nul
 		setlocal enabledelayedexpansion
 	)
+	if "%EnableWindowsNotification%"=="Yes" (
+		set type=Information
+		set WinTitre=%~2
+		Set WinMessage=%~1
+
+		::You can replace the WinIcon value by Information, error, warning and none
+		Set WinIcon=%~3
+		for /f "delims=" %%a in ('powershell -c "[reflection.assembly]::loadwithpartialname('System.Windows.Forms');[reflection.assembly]::loadwithpartialname('System.Drawing');$notify = new-object system.windows.forms.notifyicon;$notify.icon = [System.Drawing.SystemIcons]::%WinIcon%;$notify.visible = $true;$notify.showballoontip(10,'%WinTitle%','%WinMessage%',[system.windows.forms.tooltipicon]::None)"') do (set $=)
+	)
+	goto:eof
 	(
 		exit /b
 	)
@@ -970,6 +982,9 @@ GOTO:EOF
 ::2:	SET TelegramToken=123456
 ::2:	SET TelegramChatID=123456
 ::2:.
+::2:	:: Windows Notification settings
+::2:	SET EnableWindowsNotification=Yes
+::2:.
 ::2:	:: Email settings
 ::2:	SET EnableMail=No
 ::2:	SET SwithMail=%CD%\SwithMail.exe
@@ -1027,6 +1042,7 @@ GOTO:EOF
 	:updater-yes
 		DEL /Q %CD%\version.bat
 		bitsadmin.exe /transfer "Download" %downloadlink% %CD%\VaultBackup.bat
+		call :SendNotification "%CompanyName% Vault Backup Script has been updated!" "Autodesk Vault" "Information"
 		exit /b
 
 
