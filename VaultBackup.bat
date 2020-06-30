@@ -8,6 +8,7 @@
 ::					- Added Telegram support
 ::					- Added settings and info file export
 ::					- Added external settings file (BackupSettings.bat)
+:: Version 1.2.0 - By Wouter Breedveld, Cadac Group B.V., 30-06-2020
 ::					- Added Auto-update
 
 
@@ -34,11 +35,11 @@
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
 
 
-:: @echo off
+@echo off
 TITLE Cadac Group B.V. - Vault Backup Script
 if not "%1" == "max" start /MAX cmd /c %0 max & exit/b
 setlocal enabledelayedexpansion
-set scriptversion=1.1.0
+set scriptversion=1.2.0
 set BackupSettings=BackupSettings.bat
 
 :: Check admin
