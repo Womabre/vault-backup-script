@@ -35,13 +35,13 @@
 
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
 
-
 @echo off
 TITLE Cadac Group B.V. - Vault Backup Script
 if not "%1" == "max" start /MAX cmd /c %0 max & exit/b
 setlocal enabledelayedexpansion
-set scriptversion=1.2.0
-set BackupSettings=BackupSettings.bat
+SET scriptversion=1.2.0
+SET BackupSettings=BackupSettings.bat
+SET SwithMail=%CD%\SwithMail.exe
 
 :: Check admin
 call :BatchGotAdmin
@@ -53,11 +53,16 @@ call :Updater
 IF NOT EXIST "BackupSettings.bat" (
 	echo Settings file not found! Creating...
 	CALL :SettingsMissing
-	echo Settings file created. Please run again.
+	echo Settings file created. Edit settings to your preference and then run this script again.
 	pause
 	exit
 ) ELSE (
 	for /f "delims=" %%x in (%BackupSettings%) do %%x> nul 2> nul
+)
+
+:: Create Notifications Test Script
+IF NOT EXIST "NXTdim_Notifications_Test.bat" (
+	CALL :CreateNotificationTestScript
 )
 
 :: Get date and time
@@ -796,18 +801,21 @@ GOTO:EOF
 		setlocal enabledelayedexpansion
 	)
 	if "%EnableWindowsNotification%"=="Yes" (
-		set type=Information
-		set WinTitre=%~2
+		endlocal
+		set WinTitle=%~2
 		Set WinMessage=%~1
-
 		::You can replace the WinIcon value by Information, error, warning and none
 		Set WinIcon=%~3
-		for /f "delims=" %%a in ('powershell -c "[reflection.assembly]::loadwithpartialname('System.Windows.Forms');[reflection.assembly]::loadwithpartialname('System.Drawing');$notify = new-object system.windows.forms.notifyicon;$notify.icon = [System.Drawing.SystemIcons]::%WinIcon%;$notify.visible = $true;$notify.showballoontip(10,'%WinTitle%','%WinMessage%',[system.windows.forms.tooltipicon]::None)"') do (set $=)
+		call :WinNot
+		setlocal enabledelayedexpansion
 	)
-	goto:eof
 	(
 		exit /b
 	)
+	
+:WinNot
+	for /f "delims=" %%a in ('powershell -c "[reflection.assembly]::loadwithpartialname('System.Windows.Forms');[reflection.assembly]::loadwithpartialname('System.Drawing');$notify = new-object system.windows.forms.notifyicon;$notify.icon = [System.Drawing.SystemIcons]::%WinIcon%;$notify.visible = $true;$notify.showballoontip(10,'%WinTitle%','%WinMessage%',[system.windows.forms.tooltipicon]::None)"') do set $=
+	exit /b
 
 :ExportSettings
 	for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "IPv4"') do set ip==%%b
@@ -877,9 +885,12 @@ GOTO:EOF
 	ECHO Telegram ChatID:			%TelegramChatID%>>%VaultSettings%
 	
 	ECHO.>>%VaultSettings%
+	ECHO ============================== Windows Notifications ==============================   >>%VaultSettings% 
+	ECHO Enable Windows Notifications?:			%EnableWindowsNotification%>>%VaultSettings%
+	
+	ECHO.>>%VaultSettings%
 	ECHO ============================== Email Notifications ==============================   >>%VaultSettings% 
 	ECHO Enable Mail?:				%EnableMail%>>%VaultSettings%
-	ECHO SwithMail.exe location:			%SwithMail%>>%VaultSettings%
 	ECHO Outgoing mail server:			%ExchSvr%>>%VaultSettings%
 	ECHO Server Port:				%SrvPort%>>%VaultSettings%
 	ECHO Use SSL?:				%UseSSL%>>%VaultSettings%
@@ -987,7 +998,6 @@ GOTO:EOF
 ::2:.
 ::2:	:: Email settings
 ::2:	SET EnableMail=No
-::2:	SET SwithMail=%CD%\SwithMail.exe
 ::2:	SET ExchSvr=smtp.domain.com
 ::2:	SET SrvPort=587
 ::2:	SET UseSSL=Yes
@@ -1008,7 +1018,6 @@ GOTO:EOF
 	)	
 	
 :Updater
-	@echo off
 	:: INPUT THE LOCAL VERSION HERE (replace local's "1.0") also replace link with your own.
 	set local=%scriptversion%
 	set localtwo=%local%
@@ -1026,7 +1035,7 @@ GOTO:EOF
 	:: be sure download.exe is present in the directory where update.bat runs.
 	:: be sure to add " set local=2.0 " in your remote link.
 	:updater-download
-		bitsadmin.exe /transfer "Download" %updatelink% %CD%\version.bat
+		bitsadmin.exe /transfer "Download" %updatelink% %CD%\version.bat > nul 2> nul
 		CALL version.bat
 		goto updater-check-2
 
@@ -1036,14 +1045,111 @@ GOTO:EOF
 		IF NOT "%local%"=="%localtwo%" goto :updater-yes
 
 	:updater-no
-		DEL /Q %CD%\version.bat
+		DEL /Q %CD%\version.bat > nul 2> nul
 		exit /b
 		
 	:updater-yes
-		DEL /Q %CD%\version.bat
-		bitsadmin.exe /transfer "Download" %downloadlink% %CD%\VaultBackup.bat
+		DEL /Q %CD%\version.bat > nul 2> nul
+		bitsadmin.exe /transfer "Download" %downloadlink% %CD%\VaultBackup.bat > nul 2> nul
 		call :SendNotification "%CompanyName% Vault Backup Script has been updated!" "Autodesk Vault" "Information"
 		exit /b
+		
+:CreateNotificationTestScript
+::3:	@echo off
+::3:	TITLE Cadac Group B.V. - Vault Notifications test script
+::3:	setlocal enabledelayedexpansion
+::3:	SET BackupSettings=BackupSettings.bat
+::3:	SET SwithMail=%CD%\SwithMail.exe
+::3:.
+::3:	:: Check admin
+::3:	call :BatchGotAdmin
+::3:.
+::3:	:: Import Settings
+::3:	IF NOT EXIST "BackupSettings.bat" (
+::3:		echo Settings file not found!
+::3:		echo run NXTdim_Vault_Backup.bat to create BackupSettings.bat with default settings.
+::3:		pause
+::3:		exit
+::3:	) ELSE (
+::3:		for /f "delims=" %%x in (%BackupSettings%) do %%x> nul 2> nul
+::3:	)
+::3:.
+::3:	if "%UseSSL%"=="Yes" (
+::3:		SET SSL=/SSL
+::3:	) else (
+::3:		SET SSL=
+::3:	)
+::3:.
+::3:	SET SubjectTest=Vault Notifications test
+::3:	SET BodyTest=Hello world
+::3:.
+::3:	if "%EnableMail%"=="Yes" (
+::3:		"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub "%SubjectTest%" /b "%BodyTest%"
+::3:	)
+::3:.
+::3:	call :SendNotification "%BodyTest%" "%SubjectTest%" "Information"
+::3:.
+::3:	:SendNotification <Message> <Title> <Icon>
+::3:		if "%EnableTelegram%"=="Yes" (
+::3:			endlocal
+::3:			curl -s -X POST https://api.telegram.org/bot%TelegramToken%/sendMessage -d chat_id=%TelegramChatID% -d text="%~1" > nul 2> nul
+::3:			setlocal enabledelayedexpansion
+::3:		)
+::3:		if "%EnablePushOver%"=="Yes" (
+::3:			endlocal
+::3:			curl --form-string "token="%PushOverToken%"" --form-string "user="%PushOverUser%"" --form-string "html=1" --form-string "message=%~1" --form-string "title=%CompanyName% - Vault Server" --form-string "priority=-1" https://api.pushover.net/1/messages.json > nul 2> nul
+::3:			setlocal enabledelayedexpansion
+::3:		)
+::3:		if "%EnableWindowsNotification%"=="Yes" (
+::3:			endlocal
+::3:			set WinTitle=%~2
+::3:			Set WinMessage=%~1
+::3:			::You can replace the WinIcon value by Information, error, warning and none
+::3:			Set WinIcon=%~3
+::3:			call :WinNot
+::3:			setlocal enabledelayedexpansion
+::3:		)
+::3:		(
+::3:			exit /b
+::3:		)
+::3:.
+::3:	:WinNot
+::3:		for /f "delims=" %%a in ('powershell -c "[reflection.assembly]::loadwithpartialname('System.Windows.Forms');[reflection.assembly]::loadwithpartialname('System.Drawing');$notify = new-object system.windows.forms.notifyicon;$notify.icon = [System.Drawing.SystemIcons]::%WinIcon%;$notify.visible = $true;$notify.showballoontip(10,'%WinTitle%','%WinMessage%',[system.windows.forms.tooltipicon]::None)"') do set $=
+::3:		exit /b
+::3:.
+::3:	:BatchGotAdmin
+::3:		:: Check for permissions
+::3:		IF "%PROCESSOR_ARCHITECTURE%" EQU "amd64" (
+::3:		>NUL 2>&1 "%SYSTEMROOT%\SysWOW64\cacls.exe" "%SYSTEMROOT%\SysWOW64\config\system"
+::3:		) ELSE (
+::3:		>NUL 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
+::3:		)
+::3:.
+::3:		:: If error flag SET, we do not have admin.
+::3:		IF '%errorlevel%' NEQ '0' (
+::3:			ECHO %White%Requesting administrative privileges...
+::3:			GOTO UACPrompt
+::3:		) ELSE ( GOTO gotAdmin )
+::3:.
+::3:		:UACPrompt
+::3:			ECHO SET UAC = CreateObject^("Shell.Application"^) > "%temp%\getadmin.vbs"
+::3:			SET params = %*:"=""
+::3:			ECHO UAC.ShellExecute "cmd.exe", "/c ""%~s0"" %params%", "", "runas", 1 >> "%temp%\getadmin.vbs"
+::3:.
+::3:			"%temp%\getadmin.vbs"
+::3:			DEL "%temp%\getadmin.vbs"
+::3:			exit /b
+::3:.
+::3:		:gotAdmin
+::3:			PUSHD "%CD%"
+::3:			CD /D "%~dp0"
+::3:			exit /b
+			
+	FOR /f "delims=::3: tokens=*" %%A IN ('findstr /b ::3: "%~f0"') DO @ECHO%%A>>NXTdim_Notifications_Test.bat
+	
+	(
+		exit /b
+	)	
 
 
 
