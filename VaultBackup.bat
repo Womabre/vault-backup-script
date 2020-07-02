@@ -23,6 +23,7 @@
 
 :: Version 1.4.0 - By Wouter Breedveld, Cadac Group B.V., 02-07-2020
 ::					- Added MaintenanceSolution.sql Source: https://ola.hallengren.com/
+::					- Added System Info export to NFO file.
 
 
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
@@ -42,6 +43,9 @@
 TITLE Cadac Group B.V. - Vault Backup Script
 if not "%1" == "max" start /MAX cmd /c %0 max & exit/b
 setlocal enabledelayedexpansion
+ECHO Please wait...
+for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
+set HostName=%host:~2%
 SET scriptversion=1.4.0
 SET BackupSettings=BackupSettings.bat
 SET SwithMail=%CD%\SwithMail.exe
@@ -131,9 +135,6 @@ ECHO %White%
 call :getDiskspace freeMainDrive sizeMainDrive MainDrive
 call :getDiskspace freeBackUpDrive sizeBackUpDrive BackUpDrive
 
-set FMD=%freeMainDrive%
-set FBD=%freeBackUpDrive%
-
 if "%UseSSL%"=="Yes" (
 	SET SSL=/SSL
 ) else (
@@ -163,6 +164,9 @@ SET Log="%LogFolder%\BackupLog !fullstampstart!.txt"
 SET VaultSettingsFolder=%LogLocation%
 SET VaultSettings="%VaultSettingsFolder%\Vault %VaultType% %VaultVersion% Settings %CompanyName%.txt"
 
+SET SysInfoFolder=%LogLocation%
+SET SysInfo="%SysInfoFolder%\%CompanyName% - %HostName% - System Information.NFO"
+
 SET DefragLogFolder=%LogLocation%\Defragmentations
 SET DefragLog="%DefragLogFolder%\DefragLog !fullstampstart!.txt"
 
@@ -174,6 +178,11 @@ SET SQLMaintenanceLog="%SQLMaintenanceLogFolder%\SQLMaintenanceLog !fullstampsta
 
 SET CopyToNASLogFolder=%LogLocation%\CopyToNAS
 SET CopyToNASLog="%CopyToNASLogFolder%\CopyToNASLog !fullstampstart!.txt"
+
+if not exist %SysInfo% (
+	call :getTime now & ECHO [!now!] - System info file does not exist. Exporting... & ECHO [!now!] - System info file does not exist. Exporting...>>%ScriptLog%
+	msinfo32 /nfo %SysInfo% > nul 2> nul
+)
 
 if exist %VaultSettings% ( del %VaultSettings% )
 call :ExportSettings > nul 2> nul
@@ -197,7 +206,7 @@ IF %sizeGb%+2 GEQ %freeBackUpDrive% (
 	if "%EnableMail%"=="Yes" (
 		"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectFail% /b %BodyFail% /html
 	)
-	call :SendNotification "%CompanyName% Vault Backup Failed! Not enough free space." "Autodesk Vault" "Error"
+	call :SendNotification "%CompanyName% Vault Backup Failed! Not enough free space." "Autodesk Vault %VaultType% %VaultVersion%" "Error"
 	call :getTime now & ECHO [!now!] - Closing window in 10 minutes & ECHO [!now!] - Closing window in 10 minutes>>%ScriptLog%
 	timeout 600
 	GOTO :QUIT
@@ -401,7 +410,7 @@ IF %successbool% EQU 1 (
 	if "%EnableMail%"=="Yes" (
 		"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectSuccess% /a %Log%^|%ScriptLog% /b %BodySuccess% /html
 	)
-	call :SendNotification "%CompanyName% Vault Backup Successfull!" "Autodesk Vault" "Information"
+	call :SendNotification "%CompanyName% Vault Backup Successfull!" "Autodesk Vault %VaultType% %VaultVersion%" "Information"
 	call :getTime now & ECHO [!now!] - Closing window in 10 minutes & ECHO [!now!] - Closing window in 10 minutes>>%ScriptLog%
 	timeout 600
 	GOTO :QUIT
@@ -414,7 +423,7 @@ IF %successbool% EQU 0 (
 	if "%EnableMail%"=="Yes" (
 		"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectFail% /a %Log%^|%ScriptLog% /b %BodyFail% /html
 	)
-	call :SendNotification "%CompanyName% Vault Backup Failed!" "Autodesk Vault" "Error"
+	call :SendNotification "%CompanyName% Vault Backup Failed!" "Autodesk Vault %VaultType% %VaultVersion%" "Error"
 	call :getTime now &	ECHO [!now!] - Closing window in 10 minutes & ECHO [!now!] - Closing window in 10 minutes>>%ScriptLog%
 	timeout 600
 	GOTO :QUIT
@@ -427,7 +436,7 @@ IF %successbool% EQU 2 (
 	if "%EnableMail%"=="Yes" (
 		"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectError% /a %Log%^|%ScriptLog% /b %BodySuccess% /html
 	)
-	call :SendNotification "%CompanyName% Vault Backup has errors!" "Autodesk Vault" "Warning"
+	call :SendNotification "%CompanyName% Vault Backup has errors!" "Autodesk Vault %VaultType% %VaultVersion%" "Warning"
 	call :getTime now &	ECHO [!now!] - Closing window in 10 minutes & ECHO [!now!] - Closing window in 10 minutes>>%ScriptLog%
 	timeout 600
 	GOTO :QUIT
@@ -933,10 +942,7 @@ GOTO:EOF
 
 	for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Physical"') do set mac==%%b
 	set macAddress=%mac:~2%
-	
-	for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
-	set HostName=%host:~2%
-	
+		
 	for /f "skip=1 delims=" %%a in ('WMIC cpu Get name') do if not defined cpu set cpu=%%a
 	for /f "skip=1 delims=" %%a in ('WMIC cpu Get numberofcores') do if not defined cores set cores=%%a
 	
@@ -1024,9 +1030,7 @@ GOTO:EOF
 	ECHO ============================== SQL info ==============================   >>%VaultSettings%
 	sqlcmd -S %HostName%\AUTODESKVAULT -E -Q "SELECT @@VERSION">>%VaultSettings%
 	sqlcmd -S %HostName%\AUTODESKVAULT -U %SAuser% -P %SApassword% -Q "SELECT cpu_count AS [Logical CPU Count], hyperthread_ratio AS [CPU Threads],cpu_count/hyperthread_ratio AS [Physical CPU Count],physical_memory_kb/1024 AS [Physical Memory in MB] from sys.dm_os_sys_info">>%VaultSettings%
-	if not exist %CD%\%CompanyName% %HostName% System Information.NFO (
-		msinfo32 /nfo %CD%\%CompanyName% %HostName% System Information.NFO > nul 2> nul
-	)
+
 	(
 		exit /b
 	)
@@ -1168,7 +1172,7 @@ GOTO:EOF
 	:updater-yes
 		DEL /Q %CD%\version.bat > nul 2> nul
 		bitsadmin.exe /transfer "Download" %downloadlink% %CD%\VaultBackup.bat > nul 2> nul
-		call :SendNotification "%CompanyName% Vault Backup Script has been updated!" "Autodesk Vault" "Information"
+		call :SendNotification "%CompanyName% Vault Backup Script has been updated!" "Autodesk Vault %VaultType% %VaultVersion%" "Information"
 		exit /b
 		
 :CreateNotificationTestScript
