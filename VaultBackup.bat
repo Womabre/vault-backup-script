@@ -29,6 +29,13 @@
 ::					- Added Validation Schedule
 ::					- Added detection to create a full backup when new Vault or library was added.
 
+:: Version 1.5.0 - By Wouter Breedveld, Cadac Group B.V., 03-07-2020
+::					- Defragmentation now runs on all Vaults selected under SET Vault=
+::					- Automatic download of SwitchMail when it doesn't exist. https://www.tbare.com/software/swithmail/
+
+
+
+:: Run SQL Agent as automatic
 
 
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
@@ -51,7 +58,7 @@ setlocal enabledelayedexpansion
 ECHO Please wait...
 for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 set HostName=%host:~2%
-SET scriptversion=1.4.0
+SET scriptversion=1.5.0
 SET SwithMail=%CD%\SwithMail.exe
 SET BackupSettings=BackupSettings.bat
 
@@ -100,8 +107,10 @@ call :BackupOptions
 call :getVaultVersion VaultVersion VaultType
 if %VaultVersion% LEQ 2020 (
 	SET ADSKDM="%AutodeskInstallLocation%\ADMS %VaultType% %VaultVersion%\ADMS Console\Connectivity.ADMSConsole.exe"
+	SET WebConfig="%AutodeskInstallLocation%\ADMS %VaultType% %VaultVersion%\Server\Web\Services\web.config"
 ) ELSE (
 	SET ADSKDM="%AutodeskInstallLocation%\Vault Server %VaultVersion%\ADMS Console\Connectivity.ADMSConsole.exe"
+	SET WebConfig="%AutodeskInstallLocation%\Vault Server %VaultVersion%\Server\Web\Services\web.config"
 )
 
 ::1:
@@ -147,9 +156,10 @@ IF NOT EXIST "NotificationsTest.bat" (
 	CALL :CreateNotificationTestScript
 )
 
-SET NASbackup="%NASPath%\ADMS\Backup\Scheduled Backup\%Vault%"
-SET BackUpNew="%BackUpDrive%\ADMS\Backup\Scheduled Backup\%Vault%"
-SET BackUpOld="%BackUpDrive%\ADMS\Backup\Scheduled Backup\%Vault% Old"
+SET NASbackup="%NASPath%\ADMS\Backup\Scheduled Backup\Vault"
+SET BackUpNew="%BackUpDrive%\ADMS\Backup\Scheduled Backup\Vault"
+SET BackUpSQL='%BackUpDrive%\ADMS\Backup\Scheduled Backup\Vault\SQL System Databases'
+SET BackUpOld="%BackUpDrive%\ADMS\Backup\Scheduled Backup\Vault Old"
 
 :: SET up some variables
 call :getTime now & ECHO %White%[!now!] - Setting the required variables & ECHO [!now!] - Setting the required variables>>%ScriptLog%
@@ -175,6 +185,12 @@ SET B2BMigrateLog="%B2BMigrateLogFolder%\B2BMigrationLog !fullstampstart!.txt"
 SET SQLMaintenanceLogFolder=%LogLocation%\SQLMaintenance
 SET SQLMaintenanceLog="%SQLMaintenanceLogFolder%\SQLMaintenanceLog !fullstampstart!.txt"
 
+SET SQLIntegrityCheckLogFolder=%LogLocation%\SQLIntegrityCheck
+SET SQLIntegrityCheckLog="%SQLIntegrityCheckLogFolder%\SQLIntegrityCheckLog !fullstampstart!.txt"
+
+SET SQLBackupLogFolder=%LogLocation%\SQLBackup
+SET SQLBackupLog="%SQLBackupLogFolder%\SQLBackupLog !fullstampstart!.txt"
+
 SET CopyToNASLogFolder=%LogLocation%\CopyToNAS
 SET CopyToNASLog="%CopyToNASLogFolder%\CopyToNASLog !fullstampstart!.txt"
 
@@ -188,6 +204,13 @@ IF not exist %CD%\MaintenanceSolution.sql (
 	call :getTime now & ECHO [!now!] - MaintenanceSolution.sql does not exist. Downloading... & ECHO [!now!] - MaintenanceSolution.sql does not exist. Downloading...>>%ScriptLog%
 	curl https://raw.githubusercontent.com/olahallengren/sql-server-maintenance-solution/master/MaintenanceSolution.sql --output %CD%\MaintenanceSolution.sql > nul 2> nul
 	sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -i MaintenanceSolution.sql > nul 2> nul
+)
+
+:: Download SwithMail
+IF not exist %SwithMail% (
+	call :getTime now & ECHO [!now!] - SwithMail.exe does not exist. Downloading version 2.2.4.0... & ECHO [!now!] - SwithMail.exe does not exist. Downloading version 2.2.4.0...>>%ScriptLog%
+	curl "https://raw.githubusercontent.com/Womabre/vault-backup-script/master/SwithMail.exe" --output "%CD%\SwithMail.exe" > nul 2> nul
+	curl "https://raw.githubusercontent.com/Womabre/vault-backup-script/master/SwithMailreadme.txt" --output "%CD%\SwithMail Readme.txt" > nul 2> nul
 )
 
 :: Export sys info
@@ -206,7 +229,7 @@ FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "d
 SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 SET "fullstampfreespace=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
 SET SubjectFail="WARNING. Vault backup error. - %fullstampfreespace%"
-SET BodyFail="Hi,<br /^><br /^>Unfortunatly the %Vault% Vault backup failed<br /^>There is not enough space on the %BackUpDrive% drive<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remeber to eat healthy, get enough sleep and backup your computer"
+SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup failed<br /^>There is not enough space on the %BackUpDrive% drive<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remeber to eat healthy, get enough sleep and backup your computer"
 call :getTime now & ECHO [!now!] - Done Setting variables & ECHO [!now!] - Done Setting variables>>%ScriptLog%
 
 IF NOT "%BackupType%"=="None" (
@@ -230,20 +253,48 @@ IF NOT "%BackupType%"=="None" (
 IF NOT "%BackupType%"=="None" (
 	:: Check if there is a backup present
 	call :getTime now & ECHO [!now!] - Checking if a current backup is present & ECHO [!now!] - Checking if a current backup is present>>%ScriptLog%
+	setlocal enabledelayedexpansion
 	for /f %%a in ('dir /b /s /ad %BackUpNew%^|find /c /v "" ') do SET count=%%a
-
-	IF "%count%"=="0" (
+	IF "!count!"=="0" (
 		SET BackupType=Full
 		call :getTime now & ECHO [!now!] - No backup is present. Creating Full backup & ECHO [!now!] - No backup is present. Creating Full backup>>%ScriptLog%
 	)
 )
+
+:SQLIntegrityCheck
+	IF NOT "%ServerConfig%"=="VaultOnly" (
+		call :getTime now & ECHO [!now!] - Running SQL Integrity Check & ECHO [!now!] - Running SQL Integrity Check>>%ScriptLog%
+		IF NOT EXIST %SQLIntegrityCheckLogFolder% (mkdir %SQLIntegrityCheckLogFolder%)
+		BREAK>%SQLIntegrityCheckLog%
+		for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
+		set HostName=%host:~2%
+		sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "EXECUTE dbo.DatabaseIntegrityCheck @Databases = 'USER_DATABASES'" -b -o %SQLIntegrityCheckLog% > nul 2> nul
+		sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "EXECUTE dbo.DatabaseIntegrityCheck @Databases = 'SYSTEM_DATABASES'" -b -o %SQLIntegrityCheckLog% > nul 2> nul
+		:: Set time SQL Maintenance finished
+		FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
+		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
+		SET "fullstampendSQLIntergity=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
+		
+		call :reset_error
+		findstr /m /C:"%CheckStringSQL%" %SQLIntegrityCheckLog%
+		IF %errorlevel% EQU 0 (
+			call :getTime now & ECHO [!now!] - SQL Integrity finished successfully & ECHO [!now!] - SQL Integrity finished successfully>>%ScriptLog%
+			GOTO :Backup
+		) else (
+			SET successbool=1
+			SET fullstampendSQLIntergity=SQL Integrity has errors. Please check logfile. NOT CREATING A BACKUP
+			call :getTime now & ECHO [!now!] - %Red%SQL Integrity has errors. Please check logfile. NOT CREATING A BACKUP%White% & ECHO [!now!] - SQL Integrity has errors. Please check logfile. NOT CREATING A BACKUP>>%ScriptLog%
+			set "End=%TIME%"
+			GOTO :Close
+		)
+	)
 
 :Backup
 :: Do a full or incremental backup
 IF "%BackupType%"=="Full" (
 	call :ResetServices
 	call :getTime now & ECHO [!now!] - Creating a new Full backup and deleting the old if successfull & ECHO [!now!] - Creating a new Full backup and deleting the old if successfull>>%ScriptLog%
-	MOVE /Y %BackUpNew% %BackUpOld% > nul 2> nul
+	IF exist %BackUpNew% ( MOVE /Y %BackUpNew% %BackUpOld% > nul 2> nul )
 	IF not exist %BackUpNew% (mkdir %BackUpNew%)
 	call :getTime now & ECHO [!now!] - Now creating full backup on local machine & ECHO [!now!] - Now creating full backup on local machine>>%ScriptLog%
 	%ADSKDM% -Obackup -B%BackUpNew% %VaultAuth%%VaultOpt% -S -L%Log% > nul 2> nul
@@ -251,6 +302,11 @@ IF "%BackupType%"=="Full" (
 	FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 	SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 	SET "fullstampendbackup=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
+	:: Copy WebConfig
+	call :getTime now & ECHO [!now!] - Backing up Web.Config & ECHO [!now!] - Backing up Web.Config>>%ScriptLog%
+	COPY /Y %WebConfig% %BackUpNew%\Web.Config > nul 2> nul
+	call :getTime now & ECHO [!now!] - Done backing up Web.Config & ECHO [!now!] - Done backing up Web.Config>>%ScriptLog%
+	GOTO :Check1
 )
 IF "%BackupType%"=="Incremental" (
 	call :getTime now & ECHO [!now!] - Now creating incremental backup on local machine & ECHO [!now!] - Now creating incremental backup on local machine>>%ScriptLog%
@@ -259,15 +315,18 @@ IF "%BackupType%"=="Incremental" (
 	FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 	SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 	SET "fullstampendbackup=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
+	GOTO :Check1
 )
 IF "%BackupType%"=="None" (
 	call :getTime now & ECHO [!now!] - Not creating a backup at this moment & ECHO [!now!] - Not creating a backup at this moment>>%ScriptLog%
 	SET fullstampendbackup=Didn't backup the database
 	SET successbool=1
-	goto :Validation
+	goto :SQLBackup
 )
 
 :: Check if backup is successfull
+:Check1
+call :reset_error
 findstr /m /C:"%CheckString%" %Log%
 IF %errorlevel% EQU 0 (
 	SET successbool=1
@@ -275,8 +334,13 @@ IF %errorlevel% EQU 0 (
 	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - Successfully finished backup opperations & ECHO [!now!] - Successfully finished backup opperations>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
-	GOTO :Validation
+	GOTO :SQLBackup
+) else (
+	GOTO :Check2
 )
+
+:Check2
+call :reset_error
 findstr /m /C:"%CheckString2%" %Log%
 IF %errorlevel% EQU 0 (
 	SET successbool=1
@@ -284,127 +348,182 @@ IF %errorlevel% EQU 0 (
 	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - Successfully finished backup opperations & ECHO [!now!] - Successfully finished backup opperations>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
-	GOTO :Validation
+	GOTO :SQLBackup
+) else (
+	GOTO :Check3
 )
+
+:Check3
+call :reset_error
 findstr /m /C:"%CheckString3%" %Log%
 IF %errorlevel% EQU 0 (
+	set "End=%TIME%"
+	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - Failed creating incremental backup. A Vault or Library has been added or removed. Creating full backup. & ECHO [!now!] - Failed creating incremental backup. A Vault or Library has been added or removed. Creating full backup.>>%ScriptLog%
 	SET BackupType=Full
 	GOTO :Backup
 ) else (
+	set "End=%TIME%"
+	call :timediff Elapsed Start End
 	SET successbool=0
-	GOTO :BackupFailed
+	GOTO :Close
 )
 
-:Validation
-	IF %validationbool% EQU 1 (
-		call :getTime now & ECHO [!now!] - Validating the Vault & ECHO [!now!] - Validating the Vault>>%ScriptLog%
-		IF NOT EXIST %ValidateLogFolder% (mkdir %ValidateLogFolder%)
-		BREAK>%ValidateLog%
-		%ADSKDM% -Ovalidatefilestore %VaultAuth% -S -L%ValidateLog% > nul 2> nul
-		call :getTime now & ECHO [!now!] - Done validating & ECHO [!now!] - Done validating>>%ScriptLog%
-		:: Set time Validation finished
-		FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
-		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
-		SET "fullstampendvalidate=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
-	) else (
-		call :getTime now & ECHO [!now!] - Not validating the Vault at this time & ECHO [!now!] - Not validating the Vault at this time>>%ScriptLog%
-		SET fullstampendvalidate=Didn't validate the database
-		GOTO :Defragment
-	)
-	
-	findstr /m /C:"%CheckStringValidate%" %ValidateLog%
-	IF %errorlevel% EQU 1 (
-		SET successbool=1
-		GOTO :Defragment
-	) else (
-		SET successbool=2
-		SET fullstampendvalidate=Validation has errors. Please check logfile.
-		GOTO :Defragment
-	)
-
-:Defragment
-	IF %defragbool% EQU 1 (
-		call :getTime now & ECHO [!now!] - Defragmenting the Vault & ECHO [!now!] - Defragmenting the Vault>>%ScriptLog%
-		IF NOT EXIST %DefragLogFolder% (mkdir %DefragLogFolder%)
-		BREAK>%DefragLog%
-		%ADSKDM% -Odefragmentvault -N%Vault% %VaultAuth% -S -L%DefragLog% > nul 2> nul
-		call :getTime now & ECHO [!now!] - Done defragmenting & ECHO [!now!] - Done defragmenting>>%ScriptLog%
-		:: Set time Defrag finished
-		FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
-		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
-		SET "fullstampenddefrag=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
-	) else (
-		call :getTime now & ECHO [!now!] - Not defragmenting the Vault at this time & ECHO [!now!] - Not defragmenting the Vault at this time>>%ScriptLog%
-		SET fullstampenddefrag=Didn't defragment the database
-		GOTO :B2BMigrate
-	)
-	
-	findstr /m /C:"%CheckStringDefrag%" %DefragLog%
-	IF %errorlevel% EQU 0 (
-		SET successbool=1
-		GOTO :B2BMigrate
-	) else (
-		SET successbool=2
-		SET fullstampenddefrag=Defragmentation has errors. Please check logfile.
-		GOTO :B2BMigrate
-	)
-
-:B2BMigrate
-	IF %b2bbool% EQU 1 (
-		call :getTime now & ECHO [!now!] - Running B2BMigration to improve performance & ECHO [!now!] - Running B2BMigration to improve performance>>%ScriptLog%
-		IF NOT EXIST %B2BMigrateLogFolder% (mkdir %B2BMigrateLogFolder%)
-		BREAK>%B2BMigrateLog%
-		%ADSKDM% -Ob2bmigrate %VaultAuth% -S -L%B2BMigrateLog% > nul 2> nul
-		call :getTime now & ECHO [!now!] - Done running B2BMigration & ECHO [!now!] - Done running B2BMigration>>%ScriptLog%
-		:: Set time B2BMigration finished
-		FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
-		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
-		SET "fullstampendB2B=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
-	) else (
-		call :getTime now & ECHO [!now!] - Not running B2BMigration at this time & ECHO [!now!] - Not running B2BMigration at this time>>%ScriptLog%
-		SET fullstampendB2B=Didn't run B2BMigration
-		GOTO :SQLMaintenance
-	)
-	
-	findstr /m /C:"%CheckStringMigrate%" %B2BMigrateLog%
-	IF %errorlevel% EQU 0 (
-		SET successbool=1
-		GOTO :SQLMaintenance
-	) else (
-		SET successbool=2
-		SET fullstampendB2B=B2B Maintenance has errors. Please check logfile.
-		GOTO :SQLMaintenance		
-	)
-
-:SQLMaintenance
-	IF %sqlmaintbool% EQU 1 (
-		call :getTime now & ECHO [!now!] - Running SQL Maintenance to improve performance & ECHO [!now!] - Running SQL Maintenance to improve performance>>%ScriptLog%
-		IF NOT EXIST %SQLMaintenanceLogFolder% (mkdir %SQLMaintenanceLogFolder%)
-		BREAK>%SQLMaintenanceLog%
+:SQLBackup
+	IF NOT "%ServerConfig%"=="VaultOnly" (
+		call :getTime now & ECHO [!now!] - Running SQL Backup. Backup system databases. & ECHO [!now!] - Running SQL Backup. Backup system databases.>>%ScriptLog%
+		IF NOT EXIST %SQLBackupLogFolder% (mkdir %SQLBackupLogFolder%)
+		BREAK>%SQLBackupLog%
+		IF not exist %BackUpSQL% (mkdir %BackUpSQL%)
 		for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 		set HostName=%host:~2%
-		sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "EXECUTE dbo.IndexOptimize @Databases = 'USER_DATABASES'" -b -o %SQLMaintenanceLog% > nul 2> nul
-		call :getTime now & ECHO [!now!] - Done running SQL Maintenance & ECHO [!now!] - Done running SQL Maintenance>>%ScriptLog%
+		sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "EXECUTE dbo.DatabaseBackup @Databases = 'SYSTEM_DATABASES', @BackupType = 'FULL', @Directory = %BackUpSQL%" -b -o %SQLBackupLog% > nul 2> nul
+		call :getTime now & ECHO [!now!] - Done running SQL backup & ECHO [!now!] - Done running SQL backup>>%ScriptLog%
 		:: Set time SQL Maintenance finished
 		FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
-		SET "fullstampendSQL=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
-	) else (
-		call :getTime now & ECHO [!now!] - Not running SQL Maintenance at this time & ECHO [!now!] - Not running SQL Maintenance at this time>>%ScriptLog%
-		SET fullstampendSQL=Didn't run SQL Maintenance
-		GOTO :CopyToNAS
+		SET "fullstampendSQLbackup=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
+
+		call :reset_error
+		findstr /m /C:"%CheckStringSQL%" %SQLBackupLog%
+		IF %errorlevel% EQU 1 (
+			SET successbool=1
+			GOTO :Validation
+		) else (
+			SET successbool=2
+			SET fullstampendSQLbackup=SQL backup has errors. Please check logfile.
+			call :getTime now & ECHO [!now!] - %Red%SQL backup has errors. Please check logfile.%White% & ECHO [!now!] - SQL backup has errors. Please check logfile.>>%ScriptLog%
+			GOTO :Validation
+		)
 	)
-	findstr /m /C:"%CheckStringSQL%" %SQLMaintenanceLog%
-	IF %errorlevel% EQU 0 (
-		SET successbool=1
-		GOTO :CopyToNAS
-	) else (
-		SET successbool=2
-		SET fullstampendSQL=SQL Maintenance has errors. Please check logfile.
-		GOTO :CopyToNAS
+
+:Validation
+	IF NOT "%ServerConfig%"=="SQLOnly" (
+		IF %validationbool% EQU 1 (
+			call :getTime now & ECHO [!now!] - Validating the Vault & ECHO [!now!] - Validating the Vault>>%ScriptLog%
+			IF NOT EXIST %ValidateLogFolder% (mkdir %ValidateLogFolder%)
+			BREAK>%ValidateLog%
+			%ADSKDM% -Ovalidatefilestore %VaultAuth% -S -L%ValidateLog% > nul 2> nul
+			call :getTime now & ECHO [!now!] - Done validating & ECHO [!now!] - Done validating>>%ScriptLog%
+			:: Set time Validation finished
+			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
+			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
+			SET "fullstampendvalidate=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
+		) else (
+			call :getTime now & ECHO [!now!] - Not validating the Vault at this time & ECHO [!now!] - Not validating the Vault at this time>>%ScriptLog%
+			SET fullstampendvalidate=Didn't validate the database
+			GOTO :Defragment
+		)
+
+		call :reset_error
+		findstr /m /C:"%CheckStringValidate%" %ValidateLog%
+		IF %errorlevel% EQU 1 (
+			SET successbool=1
+			GOTO :Defragment
+		) else (
+			SET successbool=2
+			SET fullstampendvalidate=Validation has errors. Please check logfile.
+			call :getTime now & ECHO [!now!] - %Red%Validation has errors. Please check logfile.%White% & ECHO [!now!] - Validation has errors. Please check logfile.>>%ScriptLog%
+			GOTO :Defragment
+		)
 	)
+
+:Defragment
+	IF NOT "%ServerConfig%"=="SQLOnly" (
+		IF %defragbool% EQU 1 (
+			call :getTime now & ECHO [!now!] - Defragmenting the Vault & ECHO [!now!] - Defragmenting the Vault>>%ScriptLog%
+			IF NOT EXIST %DefragLogFolder% (mkdir %DefragLogFolder%)
+			BREAK>%DefragLog%
+			for %%i in (%Vault%) do (
+				%ADSKDM% -Odefragmentvault -N%%i %VaultAuth% -S -L%DefragLog% > nul 2> nul
+			)
+			call :getTime now & ECHO [!now!] - Done defragmenting & ECHO [!now!] - Done defragmenting>>%ScriptLog%
+			:: Set time Defrag finished
+			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
+			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
+			SET "fullstampenddefrag=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
+		) else (
+			call :getTime now & ECHO [!now!] - Not defragmenting the Vault at this time & ECHO [!now!] - Not defragmenting the Vault at this time>>%ScriptLog%
+			SET fullstampenddefrag=Didn't defragment the database
+			GOTO :B2BMigrate
+		)
 		
+		call :reset_error
+		findstr /m /C:"%CheckStringDefrag%" %DefragLog%
+		IF %errorlevel% EQU 0 (
+			SET successbool=1
+			GOTO :B2BMigrate
+		) else (
+			SET successbool=2
+			SET fullstampenddefrag=Defragmentation has errors. Please check logfile.
+			call :getTime now & ECHO [!now!] - %Red%Defragmentation has errors. Please check logfile.%White% & ECHO [!now!] - Defragmentation has errors. Please check logfile.>>%ScriptLog%
+			GOTO :B2BMigrate
+		)
+	)
+
+:B2BMigrate
+	IF NOT "%ServerConfig%"=="SQLOnly" (
+		IF %b2bbool% EQU 1 (
+			call :getTime now & ECHO [!now!] - Running B2BMigration to improve performance & ECHO [!now!] - Running B2BMigration to improve performance>>%ScriptLog%
+			IF NOT EXIST %B2BMigrateLogFolder% (mkdir %B2BMigrateLogFolder%)
+			BREAK>%B2BMigrateLog%
+			%ADSKDM% -Ob2bmigrate %VaultAuth% -S -L%B2BMigrateLog% > nul 2> nul
+			call :getTime now & ECHO [!now!] - Done running B2BMigration & ECHO [!now!] - Done running B2BMigration>>%ScriptLog%
+			:: Set time B2BMigration finished
+			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
+			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
+			SET "fullstampendB2B=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
+		) else (
+			call :getTime now & ECHO [!now!] - Not running B2BMigration at this time & ECHO [!now!] - Not running B2BMigration at this time>>%ScriptLog%
+			SET fullstampendB2B=Didn't run B2BMigration
+			GOTO :SQLMaintenance
+		)
+		
+		call :reset_error
+		findstr /m /C:"%CheckStringMigrate%" %B2BMigrateLog%
+		IF %errorlevel% EQU 0 (
+			SET successbool=1
+			GOTO :SQLMaintenance
+		) else (
+			SET successbool=2
+			SET fullstampendB2B=B2B Maintenance has errors. Please check logfile.
+			call :getTime now & ECHO [!now!] - %Red%B2B Maintenance has errors. Please check logfile.%White% & ECHO [!now!] - B2B Maintenance has errors. Please check logfile.>>%ScriptLog%
+			GOTO :SQLMaintenance		
+		)
+	)
+
+:SQLMaintenance
+	IF NOT "%ServerConfig%"=="VaultOnly" (
+		IF %sqlmaintbool% EQU 1 (
+			call :getTime now & ECHO [!now!] - Running SQL Maintenance to improve performance & ECHO [!now!] - Running SQL Maintenance to improve performance>>%ScriptLog%
+			IF NOT EXIST %SQLMaintenanceLogFolder% (mkdir %SQLMaintenanceLogFolder%)
+			BREAK>%SQLMaintenanceLog%
+			for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
+			set HostName=%host:~2%
+			sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "EXECUTE dbo.IndexOptimize @Databases = 'USER_DATABASES'" -b -o %SQLMaintenanceLog% > nul 2> nul
+			sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "EXECUTE dbo.DatabaseBackup @Databases = 'SYSTEM_DATABASES', @BackupType = 'FULL', @Directory = '%BackUpNew%'" -b -o %SQLMaintenanceLog% > nul 2> nul
+			call :getTime now & ECHO [!now!] - Done running SQL Maintenance & ECHO [!now!] - Done running SQL Maintenance>>%ScriptLog%
+			:: Set time SQL Maintenance finished
+			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
+			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
+			SET "fullstampendSQL=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
+		) else (
+			call :getTime now & ECHO [!now!] - Not running SQL Maintenance at this time & ECHO [!now!] - Not running SQL Maintenance at this time>>%ScriptLog%
+			SET fullstampendSQL=Didn't run SQL Maintenance
+			GOTO :CopyToNAS
+		)
+		call :reset_error
+		findstr /m /C:"%CheckStringSQL%" %SQLMaintenanceLog%
+		IF %errorlevel% EQU 0 (
+			SET successbool=1
+			GOTO :CopyToNAS
+		) else (
+			SET successbool=2
+			SET fullstampendSQL=SQL Maintenance has errors. Please check logfile.
+			call :getTime now & ECHO [!now!] - %Red%SQL Maintenance has errors. Please check logfile.%White% & ECHO [!now!] - SQL Maintenance has errors. Please check logfile.>>%ScriptLog%
+			GOTO :CopyToNAS
+		)
+	)
 	
 :CopyToNAS
 	IF "%CopyToNAS%"=="Yes" (
@@ -418,13 +537,13 @@ IF %errorlevel% EQU 0 (
 		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 		SET "fullstampenddelnas=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
 		call :getTime now & ECHO [!now!] - Moving backup to NAS & ECHO [!now!] - Moving backup to NAS>>%ScriptLog%
-		ROBOCOPY /E %BackUpNew% %NASbackup%>>%CopyToNASLog%
+		cmd /E %BackUpNew% %NASbackup%>>%CopyToNASLog%
 		call :getTime now & ECHO [!now!] - Done moving backup to NAS & ECHO [!now!] - Done moving backup to NAS>>%ScriptLog%
 		:: Set time moving finished
 		FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 		SET "fullstampendmove=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
-		
+		call :reset_error
 		IF %errorlevel% EQU 0 (
 			SET successbool=1
 			call :getTime now & ECHO [!now!] - Deleting backup on local disk & ECHO [!now!] - Deleting backup on local disk>>%ScriptLog%
@@ -436,7 +555,7 @@ IF %errorlevel% EQU 0 (
 			SET "fullstampenddellocal=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
 		) ELSE (
 			SET successbool=2
-			call :getTime now & ECHO [!now!] - Moving backup to NAS failed & ECHO [!now!] - Moving backup to NAS failed>>%ScriptLog%
+			call :getTime now & ECHO [!now!] - %Red%Moving backup to NAS failed%White% & ECHO [!now!] - Moving backup to NAS failed>>%ScriptLog%
 			:: Set time Move failed
 			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
@@ -458,10 +577,10 @@ IF %errorlevel% EQU 0 (
 
 :Close
 SET SubjectSuccess="Vault backup successfull - %fullstampendbackup%"
-SET BodySuccess="Hi,<br /^><br /^>Attached is the log file of the %Vault% Vault backup.<br /^>Opperations started: %fullstampstart%<br /^>Backup finished: !fullstampendbackup!<br /^>Validation finished: !fullstampendvalidate!<br /^>Defragmentation finished: !fullstampenddefrag!<br /^>B2BMigration finished: !fullstampendB2B!<br /^>SQLMaintenance finished: !fullstampendSQL!<br /^>Deleting old backup from NAS finished: !fullstampenddelnas!<br /^>Moving new backup to NAS finished: !fullstampendmove!<br /^>Deleting local backup finished: !fullstampenddellocal!<br /^>Duration: !Elapsed:~0,8!<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remeber to eat healthy, get enough sleep and backup your computer"
+SET BodySuccess="Hi,<br /^><br /^>Attached is the log file of the Vault backup.<br /^>Opperations started: %fullstampstart%<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished: !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Validation finished: !fullstampendvalidate!<br /^>Defragmentation finished: !fullstampenddefrag!<br /^>B2BMigration finished: !fullstampendB2B!<br /^>SQLMaintenance finished: !fullstampendSQL!<br /^>Deleting old backup from NAS finished: !fullstampenddelnas!<br /^>Moving new backup to NAS finished: !fullstampendmove!<br /^>Deleting local backup finished: !fullstampenddellocal!<br /^>Duration: !Elapsed:~0,8!<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remeber to eat healthy, get enough sleep and backup your computer"
 
 SET SubjectFail="WARNING Vault backup has failed - %fullstampendbackup%"
-SET BodyFail="Hi,<br /^><br /^>Unfortunatly the %Vault% Vault backup has failed.<br /^>Attached is the log file of the Vault backup.<br /^>Backup started !fullstampstart!<br /^>Backup finished !fullstampendbackup!<br /^>Duration: !Elapsed:~0,8!<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remeber to eat healthy, get enough sleep and backup your computer"
+SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup has failed.<br /^>Attached is the log file of the Vault backup.<br /^>Backup started !fullstampstart!<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Duration: !Elapsed:~0,8!<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remeber to eat healthy, get enough sleep and backup your computer"
 
 SET SubjectError="WARNING Vault backup has errors - %fullstampendbackup%"
 
@@ -568,6 +687,12 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 :getVaultVersion <VaultVersion> <VaultType>
 	setlocal enableextensions disabledelayedexpansion
 	:: Get vault version
+	IF "%ServerConfig%"=="SQLOnly" (
+		SET VT=SQL Server Only,
+		SET GetVaultVersion= No Vault installed.
+		GOTO :Continue2
+	)
+
 	reg export HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall temp1.txt
 	find "DisplayName" temp1.txt| find /V "ParentDisplayName" > temp2.txt
 	FOR /f "tokens=2,3 delims==" %%a IN (temp2.txt) DO (ECHO %%a >> software_list.txt)
@@ -575,26 +700,25 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	DEL temp2.txt
 	SET findfile="software_list.txt"
 	
+	call :reset_error	
 	findstr /R /C:\""Autodesk Vault Professional .... (Server)"\" %findfile% > nul 2> nul
 	IF %errorlevel% EQU 0 (
 		SET VT=Professional
 		GOTO :Continue
 	)
+	call :reset_error
 	findstr /R /C:\""Autodesk Vault Workgroup .... (Server)"\" %findfile% > nul 2> nul
 	IF %errorlevel% EQU 0 (
 		SET VT=Workgroup
 		GOTO :Continue
 	)
+	call :reset_error
 	findstr /R /C:\""Autodesk Vault Basic .... (Server)"\" %findfile% > nul 2> nul
 	IF %errorlevel% EQU 0 (
 		SET VT=Basic
 		GOTO :Continue
 	)
-	IF "%SQLonly%"=="Yes"
-		SET VT=SQL Server Only,
-		SET GetVaultVersion= No Vault installed.
-		GOTO :Continue2
-	)
+
 	
 	@cls
 	DEL software_list.txt
@@ -631,6 +755,7 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	call :getTime now
 	ECHO [!now!] - Closing ADMS Console if open & ECHO [!now!] - Closing ADMS Console if open>>%ScriptLog%
 	taskkill /F /IM Connectivity.ADMSConsole.exe > nul 2> nul
+	call :reset_error
 	IF %errorlevel% NEQ 0 (
 		call :getTime now
 		ECHO [!now!] - Successfully closed running ADMS Console & ECHO [!now!] - Successfully closed running ADMS Console>>%ScriptLog%
@@ -649,6 +774,7 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	)
 
 	:: If error flag SET, we do not have admin.
+	call :reset_error
 	IF '%errorlevel%' NEQ '0' (
 		ECHO %White%Requesting administrative privileges...
 		GOTO UACPrompt
@@ -676,6 +802,7 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	IF "%VALUE%"=="1" (
 		ECHO %White%QuickEdit is enabled. Disabling...
 		REG ADD %REGKEY% /v %REGVAL% /t REG_DWORD /d "0" /f
+		call :reset_error
 		IF "%ERRORLEVEL%"=="0" (
 			ECHO QuickEdit disabled successfully!
 		) ELSE (
@@ -692,7 +819,7 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	SET CheckString3=A Vault or Library has been added or removed
 	SET CheckStringMigrate=The migrate operation has been successfully finished
 	SET CheckStringDefrag=Defragmentation operation completed successfully
-	SET CheckStringSQL=[%Vault%]
+	SET CheckStringSQL=Failed
 	SET CheckStringValidate=ERROR:
 	SET ESC=
 	SET Red=%ESC%[31m
@@ -1012,6 +1139,9 @@ GOTO:EOF
 :WinNot
 	for /f "delims=" %%a in ('powershell -c "[reflection.assembly]::loadwithpartialname('System.Windows.Forms');[reflection.assembly]::loadwithpartialname('System.Drawing');$notify = new-object system.windows.forms.notifyicon;$notify.icon = [System.Drawing.SystemIcons]::%WinIcon%;$notify.visible = $true;$notify.showballoontip(10,'%WinTitle%','%WinMessage%',[system.windows.forms.tooltipicon]::None)"') do set $=
 	exit /b
+	
+:reset_error
+exit /b 0
 
 :ExportSettings
 	call :getTime now & ECHO [!now!] - Exporting settings & ECHO [!now!] - Exporting settings>>%ScriptLog%
@@ -1026,15 +1156,15 @@ GOTO:EOF
 	
 	:: Main settings
 	ECHO ============================== Main Settings ==============================   >>%VaultSettings%
-	ECHO Main drive:		%MainDrive%>>%VaultSettings%
-	ECHO backup Drive:		%BackUpDrive%>>%VaultSettings%
-	ECHO Vault Location:		%VaultLocation%>>%VaultSettings%
-	ECHO Copy backup to NAS?:	%CopyToNAS%>>%VaultSettings% 
-	ECHO NAS Path:		%NASPath%>>%VaultSettings%
-	ECHO Autodesk Install:	%AutodeskInstallLocation%>>%VaultSettings%
-	ECHO Vault Name:		%Vault%>>%VaultSettings%
-	ECHO Company Name:		%CompanyName%>>%VaultSettings%
-	ECHO Install Notepad++?:	%InstallNotepadPlus%>>%VaultSettings%
+	ECHO Main drive:				%MainDrive%>>%VaultSettings%
+	ECHO backup Drive:				%BackUpDrive%>>%VaultSettings%
+	ECHO Vault Location:				%VaultLocation%>>%VaultSettings%
+	ECHO Copy backup to NAS?:			%CopyToNAS%>>%VaultSettings% 
+	ECHO NAS Path:				%NASPath%>>%VaultSettings%
+	ECHO Autodesk Install:			%AutodeskInstallLocation%>>%VaultSettings%
+	ECHO Vault Name:				%Vault%>>%VaultSettings%
+	ECHO Company Name:				%CompanyName%>>%VaultSettings%
+	ECHO Install Notepad++?:			%InstallNotepadPlus%>>%VaultSettings%
 	
 	ECHO.>>%VaultSettings%
 	ECHO ============================== Vault Authentication and Backup settings ==============================   >>%VaultSettings% 
@@ -1048,7 +1178,7 @@ GOTO:EOF
 	ECHO Run Validation?:			%RunValidation%>>%VaultSettings%
 	ECHO Run Defragmentation?:			%RunDefragmentation%>>%VaultSettings%
 	ECHO Run B2BMigration?:			%RunB2BMigration%>>%VaultSettings%
-	ECHO Run SQL Maintenance?:		%RunSQLMaintenance%>>%VaultSettings%
+	ECHO Run SQL Maintenance?:			%RunSQLMaintenance%>>%VaultSettings%
 
 	
 	ECHO.>>%VaultSettings%
@@ -1109,7 +1239,7 @@ GOTO:EOF
 	ECHO SA username:					%SAuser%>>%VaultSettings%
 	ECHO SA password:					%SApassword%>>%VaultSettings%
 	ECHO Vault Database Instance:		%VaultDatabaseInstance%>>%VaultSettings%
-	ECHO This Server only runs SQL:		%SQLonly%>>%VaultSettings%
+	ECHO This Server runs:			%ServerConfig%>>%VaultSettings%
 	
 	ECHO.>>%VaultSettings%
 	ECHO ============================== System info ==============================   >>%VaultSettings%
@@ -1154,7 +1284,7 @@ GOTO:EOF
 ::2:	SET CopyToNAS=No
 ::2:	SET NASPath=\\NAS\somewhere
 ::2:	SET AutodeskInstallLocation=C:\Program Files\Autodesk
-::2:	SET Vault=Vault
+::2:	SET Vault=Vault,Settings
 ::2:	SET CompanyName=Your Company Name
 ::2:	SET InstallNotepadPlus=No
 ::2:.
@@ -1188,7 +1318,7 @@ GOTO:EOF
 ::2:	SET ValidationOnDay=6
 ::2:.
 ::2:	SET DefragmentOnMonth=1,2,3,4,5,6,7,8,9,10,11,12
-::2:	SET DefragmentOnWeek=1,2,3,4,5,6
+::2:	SET DefragmentOnWeek=1,2,3,4,5,6wprd
 ::2:	SET DefragmentOnDay=7
 ::2:.
 ::2:	SET B2BMigrationOnMonth=1,2,3,4,5,6,7,8,9,10,11,12
@@ -1236,7 +1366,8 @@ GOTO:EOF
 ::2:	SET SAuser=sa
 ::2:	SET SApassword=AutodeskVault@26200
 ::2:	SET VaultDatabaseInstance=AUTODESKVAULT
-::2:	SET SQLonly=No
+::2:	:: Server configuration "VaultOnly", "SQLOnly", "Both"
+::2:	SET ServerConfig=Both
 ::2:.
 ::2:	::=======================================================================================================================================================================================================
 ::2:	::=======================================================================================================================================================================================================
@@ -1251,7 +1382,9 @@ GOTO:EOF
 :Updater
 	:: INPUT THE LOCAL VERSION HERE (replace local's "1.0") also replace link with your own.
 	set local=%scriptversion%
+	SET local=!local:.=!
 	set localtwo=%local%
+	SET localtwo=!localtwo:.=!
 	set updatelink=https://raw.githubusercontent.com/Womabre/vault-backup-script/master/version.bat
 	set downloadlink=https://raw.githubusercontent.com/Womabre/vault-backup-script/master/VaultBackup.bat
 	goto :updater-check
@@ -1268,12 +1401,13 @@ GOTO:EOF
 	:updater-download
 		curl %updatelink% --output %CD%\version.bat > nul 2> nul
 		CALL version.bat
+		SET local=!local:.=!
 		goto updater-check-2
 
 	:: updater-check-2 is where it checks if your remote matches with your local.
 	:updater-check-2
-		IF "%local%"=="%localtwo%" goto :updater-no
-		IF NOT "%local%"=="%localtwo%" goto :updater-yes
+		IF %local% LEQ %localtwo% goto :updater-no
+		IF %local% GTR %localtwo% goto :updater-yes
 
 	:updater-no
 		DEL /Q %CD%\version.bat > nul 2> nul
@@ -1360,6 +1494,7 @@ GOTO:EOF
 ::3:		)
 ::3:.
 ::3:		:: If error flag SET, we do not have admin.
+::3:		call :reset_error
 ::3:		IF '%errorlevel%' NEQ '0' (
 ::3:			ECHO %White%Requesting administrative privileges...
 ::3:			GOTO UACPrompt
