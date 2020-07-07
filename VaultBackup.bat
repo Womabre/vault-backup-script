@@ -1327,7 +1327,7 @@ exit /b 0
 ::2:	:: Extra fucntions
 ::2:	SET RunValidation=Yes
 ::2:	SET RunDefragmentation=Yes
-::2:	SET RunB2BMigration=Yes
+::2:	SET RunB2BMigration=No
 ::2:	SET RunSQLMaintenance=Yes
 ::2:.
 ::2:	::===== SCHEDULE =====
