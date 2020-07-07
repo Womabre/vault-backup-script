@@ -1502,7 +1502,6 @@ exit /b 0
 ::3:		)
 ::3:.
 ::3:		:: If error flag SET, we do not have admin.
-::3:		call :reset_error
 ::3:		IF '%errorlevel%' NEQ '0' (
 ::3:			ECHO %White%Requesting administrative privileges...
 ::3:			GOTO UACPrompt
