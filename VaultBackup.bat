@@ -35,6 +35,7 @@
 
 :: Version 1.0.7 - By Wouter Breedveld, Cadac Group B.V., 07-07-2020
 ::					- Small bug fixes in logging.
+::					- Added Recovery mode check for KnowledgeVaultMaster. Set to SIMPLE.
 
 
 
@@ -220,6 +221,15 @@ if not exist %SysInfo% (
 	msinfo32 /nfo %SysInfo% > nul 2> nul
 )
 
+:: Check recovery mode KnowledgeVaultMaster
+sqlcmd -S %HostName%\AUTODESKVAULT -U %SAuser% -P %SApassword% -Q "SELECT DATABASEPROPERTYEX('KnowledgeVaultMaster', 'Recovery');" > RecoveryMode.txt
+findstr /m /C:"SIMPLE" RecoveryMode.txt > nul 2> nul
+IF %errorlevel% EQU 1 (
+	call :getTime now & ECHO [!now!] - Recovery mode of KnowledgeVaultMaster not set to SIMPLE. Changing... & ECHO [!now!] - Recovery mode of KnowledgeVaultMaster not set to SIMPLE. Changing...>>%ScriptLog%
+	sqlcmd -S %HostName%\AUTODESKVAULT -U %SAuser% -P %SApassword% -Q "ALTER DATABASE KnowledgeVaultMaster SET RECOVERY SIMPLE"
+)
+del RecoveryMode.txt
+
 if exist %VaultSettings% ( del %VaultSettings% )
 call :ExportSettings > nul 2> nul
 call :SetSchedule
@@ -276,7 +286,7 @@ IF NOT "%BackupType%"=="None" (
 		SET "fullstampendSQLIntergity=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
 	)
 	call :reset_error
-	findstr /m /C:"%CheckStringSQL%" %SQLIntegrityCheckLog%
+	findstr /m /C:"%CheckStringSQL%" %SQLIntegrityCheckLog% > nul 2> nul
 	IF NOT "%ServerConfig%"=="VaultOnly" (
 		IF %errorlevel% EQU 1 (
 			call :getTime now & ECHO [!now!] - %Green%SQL Integrity finished successfully%White% & ECHO [!now!] - SQL Integrity finished successfully>>%ScriptLog%
@@ -328,7 +338,7 @@ IF "%BackupType%"=="None" (
 :: Check if backup is successfull
 :Check1
 call :reset_error
-findstr /m /C:"%CheckString%" %Log%
+findstr /m /C:"%CheckString%" %Log% > nul 2> nul
 IF %errorlevel% EQU 0 (
 	SET successbool=1
 	set "End=%TIME%"
@@ -342,7 +352,7 @@ IF %errorlevel% EQU 0 (
 
 :Check2
 call :reset_error
-findstr /m /C:"%CheckString2%" %Log%
+findstr /m /C:"%CheckString2%" %Log% > nul 2> nul
 IF %errorlevel% EQU 0 (
 	SET successbool=1
 	set "End=%TIME%"
@@ -356,7 +366,7 @@ IF %errorlevel% EQU 0 (
 
 :Check3
 call :reset_error
-findstr /m /C:"%CheckString3%" %Log%
+findstr /m /C:"%CheckString3%" %Log% > nul 2> nul
 IF %errorlevel% EQU 0 (
 	set "End=%TIME%"
 	call :timediff Elapsed Start End
@@ -385,7 +395,7 @@ IF %errorlevel% EQU 0 (
 		SET "fullstampendSQLbackup=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
 	)
 	call :reset_error
-	findstr /m /C:"%CheckStringSQL%" %SQLBackupLog%
+	findstr /m /C:"%CheckStringSQL%" %SQLBackupLog% > nul 2> nul
 	IF NOT "%ServerConfig%"=="VaultOnly" (
 		IF %errorlevel% EQU 1 (
 			SET successbool=1
@@ -417,7 +427,7 @@ IF %errorlevel% EQU 0 (
 		)
 	)
 	call :reset_error
-	findstr /m /C:"%CheckStringValidate%" %ValidateLog%
+	findstr /m /C:"%CheckStringValidate%" %ValidateLog% > nul 2> nul
 	IF NOT "%ServerConfig%"=="SQLOnly" (
 		IF %errorlevel% EQU 1 (
 			SET successbool=1
@@ -451,7 +461,7 @@ IF %errorlevel% EQU 0 (
 		)
 	)
 	call :reset_error
-	findstr /m /C:"%CheckStringDefrag%" %DefragLog%
+	findstr /m /C:"%CheckStringDefrag%" %DefragLog% > nul 2> nul
 	IF NOT "%ServerConfig%"=="SQLOnly" (	
 		IF %errorlevel% EQU 0 (
 			SET successbool=1
@@ -483,7 +493,7 @@ IF %errorlevel% EQU 0 (
 		)
 	)
 	call :reset_error
-	findstr /m /C:"%CheckStringMigrate%" %B2BMigrateLog%
+	findstr /m /C:"%CheckStringMigrate%" %B2BMigrateLog% > nul 2> nul
 	IF NOT "%ServerConfig%"=="SQLOnly" (
 		IF %errorlevel% EQU 0 (
 			SET successbool=1
@@ -519,9 +529,9 @@ IF %errorlevel% EQU 0 (
 		)
 	)
 	call :reset_error
-	findstr /m /C:"%CheckStringSQL%" %SQLMaintenanceLog%
+	findstr /m /C:"%CheckStringSQL%" %SQLMaintenanceLog% > nul 2> nul
 	IF NOT "%ServerConfig%"=="VaultOnly" (
-		IF %errorlevel% EQU 0 (
+		IF %errorlevel% EQU 1 (
 			SET successbool=1
 			call :getTime now & ECHO [!now!] - %Green%SQL Maintenance finished successfully.%White% & ECHO [!now!] - SQL Maintenance finished successfully.>>%ScriptLog%
 			GOTO :CopyToNAS
@@ -534,40 +544,48 @@ IF %errorlevel% EQU 0 (
 	)
 	
 :CopyToNAS
-	IF "%CopyToNAS%"=="Yes" (
-		IF NOT EXIST %CopyToNASLogFolder% (mkdir %CopyToNASLogFolder%)
-		BREAK>%CopyToNASLog%
-		call :getTime now & ECHO [!now!] - Deleting old backup on NAS & ECHO [!now!] - Deleting old backup on NAS>>%ScriptLog%
-		RMDIR /S /Q %NASbackup%>>%CopyToNASLog%
-		call :getTime now & ECHO [!now!] - Done deleting old backup on NAS & ECHO [!now!] - Done deleting old backup on NAS>>%ScriptLog%
-		:: Set time Deletion NAS finished
-		FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
-		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
-		SET "fullstampenddelnas=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
-		call :getTime now & ECHO [!now!] - Moving backup to NAS & ECHO [!now!] - Moving backup to NAS>>%ScriptLog%
-		cmd /E %BackUpNew% %NASbackup%>>%CopyToNASLog%
-		call :getTime now & ECHO [!now!] - Done moving backup to NAS & ECHO [!now!] - Done moving backup to NAS>>%ScriptLog%
-		:: Set time moving finished
-		FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
-		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
-		SET "fullstampendmove=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
-		call :reset_error
-		IF %errorlevel% EQU 0 (
-			SET successbool=1
-			call :getTime now & ECHO [!now!] - Deleting backup on local disk & ECHO [!now!] - Deleting backup on local disk>>%ScriptLog%
-			RMDIR /S /Q %BackUpNew%>>%CopyToNASLog%
-			call :getTime now & ECHO [!now!] - Done deleting backup on local disk & ECHO [!now!] - Done deleting backup on local disk>>%ScriptLog%
-			:: Set time Deletion local finished
+	IF "%BackupType%"=="Full" (
+		IF "%CopyToNAS%"=="Yes" (
+			IF NOT EXIST %CopyToNASLogFolder% (mkdir %CopyToNASLogFolder%)
+			BREAK>%CopyToNASLog%
+			call :getTime now & ECHO [!now!] - Deleting old backup on NAS & ECHO [!now!] - Deleting old backup on NAS>>%ScriptLog%
+			RMDIR /S /Q %NASbackup%>>%CopyToNASLog%
+			call :getTime now & ECHO [!now!] - Done deleting old backup on NAS & ECHO [!now!] - Done deleting old backup on NAS>>%ScriptLog%
+			:: Set time Deletion NAS finished
 			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
-			SET "fullstampenddellocal=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
-		) ELSE (
-			SET successbool=2
-			call :getTime now & ECHO [!now!] - %Red%Moving backup to NAS failed%White% & ECHO [!now!] - Moving backup to NAS failed>>%ScriptLog%
-			:: Set time Move failed
+			SET "fullstampenddelnas=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
+			call :getTime now & ECHO [!now!] - Moving backup to NAS & ECHO [!now!] - Moving backup to NAS>>%ScriptLog%
+			ROBOCOPY /E %BackUpNew% %NASbackup%>>%CopyToNASLog%
+			call :getTime now & ECHO [!now!] - Done moving backup to NAS & ECHO [!now!] - Done moving backup to NAS>>%ScriptLog%
+			:: Set time moving finished
 			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
-			SET fullstampenddellocal=Failed moving the backup. Please check logfile.
+			SET "fullstampendmove=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
+			call :reset_error
+			IF %errorlevel% EQU 0 (
+				SET successbool=1
+				call :getTime now & ECHO [!now!] - Deleting backup on local disk & ECHO [!now!] - Deleting backup on local disk>>%ScriptLog%
+				RMDIR /S /Q %BackUpNew%>>%CopyToNASLog%
+				call :getTime now & ECHO [!now!] - Done deleting backup on local disk & ECHO [!now!] - Done deleting backup on local disk>>%ScriptLog%
+				:: Set time Deletion local finished
+				FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
+				SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
+				SET "fullstampenddellocal=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
+			) ELSE (
+				SET successbool=2
+				call :getTime now & ECHO [!now!] - %Red%Moving backup to NAS failed%White% & ECHO [!now!] - Moving backup to NAS failed>>%ScriptLog%
+				:: Set time Move failed
+				FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
+				SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
+				SET fullstampenddellocal=Failed moving the backup. Please check logfile.
+			)
+		) else (
+			call :getTime now & ECHO [!now!] - Not copying to NAS at this time & ECHO [!now!] - Not copying to NAS at this time>>%ScriptLog%
+			SET fullstampendmove=Didn't copy to NAS
+			SET fullstampenddellocal=Didn't copy to NAS
+			SET fullstampenddelnas=Didn't copy to NAS
+			GOTO :DeleteLocal
 		)
 	) else (
 		call :getTime now & ECHO [!now!] - Not copying to NAS at this time & ECHO [!now!] - Not copying to NAS at this time>>%ScriptLog%
@@ -584,6 +602,10 @@ IF %errorlevel% EQU 0 (
 	)
 
 :Close
+set "End=%TIME%"
+call :timediff Elapsed Start End
+call :getTime now & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
+
 SET SubjectSuccess="Vault backup successfull - %fullstampendbackup%"
 SET BodySuccess="Hi,<br /^><br /^>Attached is the log file of the Vault backup.<br /^>Opperations started: %fullstampstart%<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished: !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Validation finished: !fullstampendvalidate!<br /^>Defragmentation finished: !fullstampenddefrag!<br /^>B2BMigration finished: !fullstampendB2B!<br /^>SQLMaintenance finished: !fullstampendSQL!<br /^>Deleting old backup from NAS finished: !fullstampenddelnas!<br /^>Moving new backup to NAS finished: !fullstampendmove!<br /^>Deleting local backup finished: !fullstampenddellocal!<br /^>Duration: !Elapsed:~0,8!<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remeber to eat healthy, get enough sleep and backup your computer"
 
