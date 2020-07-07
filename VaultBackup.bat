@@ -8,34 +8,34 @@
 ::					- Added PushOver support
 ::					- Added email support Source: https://www.tbare.com/software/swithmail/
 
-:: Version 1.1.0 - By Wouter Breedveld, Cadac Group B.V., 30-06-2020
+:: Version 1.0.2 - By Wouter Breedveld, Cadac Group B.V., 30-06-2020
 ::					- Added Telegram support
 ::					- Added settings and info file export
 ::					- Added external settings file (BackupSettings.bat)
 
-:: Version 1.2.0 - By Wouter Breedveld, Cadac Group B.V., 30-06-2020
+:: Version 1.0.3 - By Wouter Breedveld, Cadac Group B.V., 30-06-2020
 ::					- Added Auto-update
 ::					- Added Windows Notifications
 
-:: Version 1.3.0 - By Wouter Breedveld, Cadac Group B.V., 01-07-2020
+:: Version 1.0.4 - By Wouter Breedveld, Cadac Group B.V., 01-07-2020
 ::					- Fixed log patch quotes
 ::					- Changed location from ADMSBackup to ADMS\Backup
 ::					- Added error notification if Defrag/B2BMigrate/SQLMaintenance failes
 ::					- Added notification test script creation.
 
-:: Version 1.4.0 - By Wouter Breedveld, Cadac Group B.V., 02-07-2020
+:: Version 1.0.5 - By Wouter Breedveld, Cadac Group B.V., 02-07-2020
 ::					- Added MaintenanceSolution.sql Source: https://ola.hallengren.com/
 ::					- Added System Info export to NFO file.
 ::					- Added Validation Schedule
 ::					- Added detection to create a full backup when new Vault or library was added.
 
-:: Version 1.5.0 - By Wouter Breedveld, Cadac Group B.V., 03-07-2020
+:: Version 1.0.6 - By Wouter Breedveld, Cadac Group B.V., 03-07-2020
 ::					- Defragmentation now runs on all Vaults selected under SET Vault=
 ::					- Automatic download of SwitchMail when it doesn't exist. https://www.tbare.com/software/swithmail/
 
+:: Version 1.0.7 - By Wouter Breedveld, Cadac Group B.V., 07-07-2020
+::					- Small bug fixes in logging.
 
-
-:: Run SQL Agent as automatic
 
 
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
@@ -58,7 +58,7 @@ setlocal enabledelayedexpansion
 ECHO Please wait...
 for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 set HostName=%host:~2%
-SET scriptversion=1.5.0
+SET scriptversion=1.0.7
 SET SwithMail=%CD%\SwithMail.exe
 SET BackupSettings=BackupSettings.bat
 
@@ -159,6 +159,7 @@ IF NOT EXIST "NotificationsTest.bat" (
 SET NASbackup="%NASPath%\ADMS\Backup\Scheduled Backup\Vault"
 SET BackUpNew="%BackUpDrive%\ADMS\Backup\Scheduled Backup\Vault"
 SET BackUpSQL='%BackUpDrive%\ADMS\Backup\Scheduled Backup\Vault\SQL System Databases'
+SET BackUpSQL2="%BackUpDrive%\ADMS\Backup\Scheduled Backup\Vault\SQL System Databases"
 SET BackUpOld="%BackUpDrive%\ADMS\Backup\Scheduled Backup\Vault Old"
 
 :: SET up some variables
@@ -230,14 +231,13 @@ SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,
 SET "fullstampfreespace=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
 SET SubjectFail="WARNING. Vault backup error. - %fullstampfreespace%"
 SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup failed<br /^>There is not enough space on the %BackUpDrive% drive<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remeber to eat healthy, get enough sleep and backup your computer"
-call :getTime now & ECHO [!now!] - Done Setting variables & ECHO [!now!] - Done Setting variables>>%ScriptLog%
 
 IF NOT "%BackupType%"=="None" (
 	:: Check if enough free space is available
 	CALL :folderSize size "%VaultLocation%" "/S"
 	
-	IF %sizeGb%+2 GEQ %freeBackUpDrive% (
-		call :getTime now & ECHO [!now!] - %Red%Failed%White%. Not enough free space on %BackUpDrive% & ECHO [!now!] - Failed. Not enough free space on %BackUpDrive%>>%ScriptLog%
+	IF %sizeGb%+1 GEQ %freeBackUpDrive% (
+		call :getTime now & ECHO [!now!] - %Red%Failed. Not enough free space on %BackUpDrive%%White% & ECHO [!now!] - Failed. Not enough free space on %BackUpDrive%>>%ScriptLog%
 		if "%EnableMail%"=="Yes" (
 			"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectFail% /b %BodyFail% /html
 		)
@@ -246,7 +246,7 @@ IF NOT "%BackupType%"=="None" (
 		timeout 600
 		GOTO :QUIT
 	) ELSE (
-		call :getTime now & ECHO [!now!] - Enough free space for backup available on %BackUpDrive% & ECHO [!now!] - Enough free space for backup available on %BackUpDrive%>>%ScriptLog%
+		call :getTime now & ECHO [!now!] - %Green%Enough free space for backup available on %BackUpDrive%%White% & ECHO [!now!] - Enough free space for backup available on %BackUpDrive%>>%ScriptLog%
 	)
 )
 
@@ -274,14 +274,15 @@ IF NOT "%BackupType%"=="None" (
 		FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 		SET "fullstampendSQLIntergity=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
-		
-		call :reset_error
-		findstr /m /C:"%CheckStringSQL%" %SQLIntegrityCheckLog%
-		IF %errorlevel% EQU 0 (
-			call :getTime now & ECHO [!now!] - SQL Integrity finished successfully & ECHO [!now!] - SQL Integrity finished successfully>>%ScriptLog%
+	)
+	call :reset_error
+	findstr /m /C:"%CheckStringSQL%" %SQLIntegrityCheckLog%
+	IF NOT "%ServerConfig%"=="VaultOnly" (
+		IF %errorlevel% EQU 1 (
+			call :getTime now & ECHO [!now!] - %Green%SQL Integrity finished successfully%White% & ECHO [!now!] - SQL Integrity finished successfully>>%ScriptLog%
 			GOTO :Backup
 		) else (
-			SET successbool=1
+			SET successbool=0
 			SET fullstampendSQLIntergity=SQL Integrity has errors. Please check logfile. NOT CREATING A BACKUP
 			call :getTime now & ECHO [!now!] - %Red%SQL Integrity has errors. Please check logfile. NOT CREATING A BACKUP%White% & ECHO [!now!] - SQL Integrity has errors. Please check logfile. NOT CREATING A BACKUP>>%ScriptLog%
 			set "End=%TIME%"
@@ -332,7 +333,7 @@ IF %errorlevel% EQU 0 (
 	SET successbool=1
 	set "End=%TIME%"
 	call :timediff Elapsed Start End
-	call :getTime now & ECHO [!now!] - Successfully finished backup opperations & ECHO [!now!] - Successfully finished backup opperations>>%ScriptLog%
+	call :getTime now & ECHO [!now!] - %Green%Successfully finished backup opperations%White% & ECHO [!now!] - Successfully finished backup opperations>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
 	GOTO :SQLBackup
 ) else (
@@ -346,7 +347,7 @@ IF %errorlevel% EQU 0 (
 	SET successbool=1
 	set "End=%TIME%"
 	call :timediff Elapsed Start End
-	call :getTime now & ECHO [!now!] - Successfully finished backup opperations & ECHO [!now!] - Successfully finished backup opperations>>%ScriptLog%
+	call :getTime now & ECHO [!now!] - %Green%Successfully finished backup opperations%White% & ECHO [!now!] - Successfully finished backup opperations>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
 	GOTO :SQLBackup
 ) else (
@@ -359,7 +360,7 @@ findstr /m /C:"%CheckString3%" %Log%
 IF %errorlevel% EQU 0 (
 	set "End=%TIME%"
 	call :timediff Elapsed Start End
-	call :getTime now & ECHO [!now!] - Failed creating incremental backup. A Vault or Library has been added or removed. Creating full backup. & ECHO [!now!] - Failed creating incremental backup. A Vault or Library has been added or removed. Creating full backup.>>%ScriptLog%
+	call :getTime now & ECHO [!now!] - %Red%Failed creating incremental backup. A Vault or Library has been added or removed. Creating full backup.%White% & ECHO [!now!] - Failed creating incremental backup. A Vault or Library has been added or removed. Creating full backup.>>%ScriptLog%
 	SET BackupType=Full
 	GOTO :Backup
 ) else (
@@ -373,21 +374,22 @@ IF %errorlevel% EQU 0 (
 	IF NOT "%ServerConfig%"=="VaultOnly" (
 		call :getTime now & ECHO [!now!] - Running SQL Backup. Backup system databases. & ECHO [!now!] - Running SQL Backup. Backup system databases.>>%ScriptLog%
 		IF NOT EXIST %SQLBackupLogFolder% (mkdir %SQLBackupLogFolder%)
-		BREAK>%SQLBackupLog%
-		IF not exist %BackUpSQL% (mkdir %BackUpSQL%)
+		IF not exist %BackUpSQL2% (mkdir %BackUpSQL2%)
+		BREAK>%SQLBackupLog%	
 		for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 		set HostName=%host:~2%
 		sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "EXECUTE dbo.DatabaseBackup @Databases = 'SYSTEM_DATABASES', @BackupType = 'FULL', @Directory = %BackUpSQL%" -b -o %SQLBackupLog% > nul 2> nul
-		call :getTime now & ECHO [!now!] - Done running SQL backup & ECHO [!now!] - Done running SQL backup>>%ScriptLog%
 		:: Set time SQL Maintenance finished
 		FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 		SET "fullstampendSQLbackup=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
-
-		call :reset_error
-		findstr /m /C:"%CheckStringSQL%" %SQLBackupLog%
+	)
+	call :reset_error
+	findstr /m /C:"%CheckStringSQL%" %SQLBackupLog%
+	IF NOT "%ServerConfig%"=="VaultOnly" (
 		IF %errorlevel% EQU 1 (
 			SET successbool=1
+			call :getTime now & ECHO [!now!] - %Green%SQL backup finished successfully.%White% & ECHO [!now!] - SQL backup finished successfully.>>%ScriptLog%
 			GOTO :Validation
 		) else (
 			SET successbool=2
@@ -404,7 +406,6 @@ IF %errorlevel% EQU 0 (
 			IF NOT EXIST %ValidateLogFolder% (mkdir %ValidateLogFolder%)
 			BREAK>%ValidateLog%
 			%ADSKDM% -Ovalidatefilestore %VaultAuth% -S -L%ValidateLog% > nul 2> nul
-			call :getTime now & ECHO [!now!] - Done validating & ECHO [!now!] - Done validating>>%ScriptLog%
 			:: Set time Validation finished
 			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
@@ -414,11 +415,13 @@ IF %errorlevel% EQU 0 (
 			SET fullstampendvalidate=Didn't validate the database
 			GOTO :Defragment
 		)
-
-		call :reset_error
-		findstr /m /C:"%CheckStringValidate%" %ValidateLog%
+	)
+	call :reset_error
+	findstr /m /C:"%CheckStringValidate%" %ValidateLog%
+	IF NOT "%ServerConfig%"=="SQLOnly" (
 		IF %errorlevel% EQU 1 (
 			SET successbool=1
+			call :getTime now & ECHO [!now!] - %Green%Validation finished successfully.%White% & ECHO [!now!] - Validation finished successfully.>>%ScriptLog%
 			GOTO :Defragment
 		) else (
 			SET successbool=2
@@ -437,7 +440,6 @@ IF %errorlevel% EQU 0 (
 			for %%i in (%Vault%) do (
 				%ADSKDM% -Odefragmentvault -N%%i %VaultAuth% -S -L%DefragLog% > nul 2> nul
 			)
-			call :getTime now & ECHO [!now!] - Done defragmenting & ECHO [!now!] - Done defragmenting>>%ScriptLog%
 			:: Set time Defrag finished
 			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
@@ -447,11 +449,13 @@ IF %errorlevel% EQU 0 (
 			SET fullstampenddefrag=Didn't defragment the database
 			GOTO :B2BMigrate
 		)
-		
-		call :reset_error
-		findstr /m /C:"%CheckStringDefrag%" %DefragLog%
+	)
+	call :reset_error
+	findstr /m /C:"%CheckStringDefrag%" %DefragLog%
+	IF NOT "%ServerConfig%"=="SQLOnly" (	
 		IF %errorlevel% EQU 0 (
 			SET successbool=1
+			call :getTime now & ECHO [!now!] - %Green%Defragmentation finished successfully.%White% & ECHO [!now!] - Defragmentation finished successfully.>>%ScriptLog%
 			GOTO :B2BMigrate
 		) else (
 			SET successbool=2
@@ -468,7 +472,6 @@ IF %errorlevel% EQU 0 (
 			IF NOT EXIST %B2BMigrateLogFolder% (mkdir %B2BMigrateLogFolder%)
 			BREAK>%B2BMigrateLog%
 			%ADSKDM% -Ob2bmigrate %VaultAuth% -S -L%B2BMigrateLog% > nul 2> nul
-			call :getTime now & ECHO [!now!] - Done running B2BMigration & ECHO [!now!] - Done running B2BMigration>>%ScriptLog%
 			:: Set time B2BMigration finished
 			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
@@ -478,11 +481,13 @@ IF %errorlevel% EQU 0 (
 			SET fullstampendB2B=Didn't run B2BMigration
 			GOTO :SQLMaintenance
 		)
-		
-		call :reset_error
-		findstr /m /C:"%CheckStringMigrate%" %B2BMigrateLog%
+	)
+	call :reset_error
+	findstr /m /C:"%CheckStringMigrate%" %B2BMigrateLog%
+	IF NOT "%ServerConfig%"=="SQLOnly" (
 		IF %errorlevel% EQU 0 (
 			SET successbool=1
+			call :getTime now & ECHO [!now!] - %Green%B2B Maintenance finished successfully.%White% & ECHO [!now!] - B2B Maintenance finished successfully.>>%ScriptLog%
 			GOTO :SQLMaintenance
 		) else (
 			SET successbool=2
@@ -502,7 +507,7 @@ IF %errorlevel% EQU 0 (
 			set HostName=%host:~2%
 			sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "EXECUTE dbo.IndexOptimize @Databases = 'USER_DATABASES'" -b -o %SQLMaintenanceLog% > nul 2> nul
 			sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "EXECUTE dbo.DatabaseBackup @Databases = 'SYSTEM_DATABASES', @BackupType = 'FULL', @Directory = '%BackUpNew%'" -b -o %SQLMaintenanceLog% > nul 2> nul
-			call :getTime now & ECHO [!now!] - Done running SQL Maintenance & ECHO [!now!] - Done running SQL Maintenance>>%ScriptLog%
+
 			:: Set time SQL Maintenance finished
 			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
@@ -512,10 +517,13 @@ IF %errorlevel% EQU 0 (
 			SET fullstampendSQL=Didn't run SQL Maintenance
 			GOTO :CopyToNAS
 		)
-		call :reset_error
-		findstr /m /C:"%CheckStringSQL%" %SQLMaintenanceLog%
+	)
+	call :reset_error
+	findstr /m /C:"%CheckStringSQL%" %SQLMaintenanceLog%
+	IF NOT "%ServerConfig%"=="VaultOnly" (
 		IF %errorlevel% EQU 0 (
 			SET successbool=1
+			call :getTime now & ECHO [!now!] - %Green%SQL Maintenance finished successfully.%White% & ECHO [!now!] - SQL Maintenance finished successfully.>>%ScriptLog%
 			GOTO :CopyToNAS
 		) else (
 			SET successbool=2
@@ -820,7 +828,7 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	SET CheckStringMigrate=The migrate operation has been successfully finished
 	SET CheckStringDefrag=Defragmentation operation completed successfully
 	SET CheckStringSQL=Failed
-	SET CheckStringValidate=ERROR:
+	SET CheckStringValidate=ERROR
 	SET ESC=
 	SET Red=%ESC%[31m
 	SET Green=%ESC%[32m
