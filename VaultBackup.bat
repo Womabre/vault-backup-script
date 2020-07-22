@@ -37,6 +37,13 @@
 ::					- Small bug fixes in logging.
 ::					- Added Recovery mode check for KnowledgeVaultMaster. Set to SIMPLE.
 
+:: Version 1.0.8 - By Wouter Breedveld, Cadac Group B.V., 08-07-2020
+::					- Updated switches link in BackupSettings.bat
+
+:: Version 1.0.9 - By Wouter Breedveld, Cadac Group B.V., 22-07-2020
+::					- Fix. No incremental backup when Vault Workgroup or Basic is installed.
+::					- Added option to disable Automatic Updates.
+::					- Added option to change the ADMS Path.
 
 
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
@@ -59,7 +66,7 @@ setlocal enabledelayedexpansion
 ECHO Please wait...
 for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 set HostName=%host:~2%
-SET scriptversion=1.0.7
+SET scriptversion=1.0.9
 SET SwithMail=%CD%\SwithMail.exe
 SET BackupSettings=BackupSettings.bat
 
@@ -70,7 +77,9 @@ call :BatchGotAdmin
 call :checkCURL
 
 :: Check for update
-call :Updater
+IF "%AutomaticUpdate%"=="Yes" (
+	call :Updater
+)
 
 :: Import Settings
 IF NOT EXIST "BackupSettings.bat" (
@@ -91,7 +100,7 @@ SET "YY=%dt:~2,2%" & SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,
 SET "datestampstart=%YYYY%%MM%%DD%" & SET "timestampstart=%HH%%Min%%Sec%" & SET "fullstampstart=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
 
 :: Console Log
-SET "LogLocation=%BackUpDrive%\ADMS\Backup\Logs"
+SET "LogLocation=%BackUpDrive%\%RootFolder%\Backup\Logs"
 SET ScriptLogFolder="%LogLocation%\Script"
 IF NOT EXIST %ScriptLogFolder% (mkdir %ScriptLogFolder%)
 SET ScriptLog="%LogLocation%\Script\ScriptLog !fullstampstart!.txt"
@@ -138,7 +147,7 @@ ECHO %White%Version %scriptversion% & ECHO Version %scriptversion%>>%ScriptLog%
 ECHO %White%Date last edited %filedate% & ECHO Date last edited %filedate%>>%ScriptLog%
 ECHO %White%Installed Vault version: %VaultType% %VaultVersion% & ECHO Installed Vault version: %VaultType% %VaultVersion%>>%ScriptLog%
 ECHO %Red%============================================================================================================================================================
-ECHO %White%Starting opperations !fullstampstart! & ECHO Starting opperations !fullstampstart!>>%ScriptLog%
+ECHO %White%Starting operations !fullstampstart! & ECHO Starting operations !fullstampstart!>>%ScriptLog%
 ECHO %Red%============================================================================================================================================================
 ECHO %White%
 
@@ -157,11 +166,11 @@ IF NOT EXIST "NotificationsTest.bat" (
 	CALL :CreateNotificationTestScript
 )
 
-SET NASbackup="%NASPath%\ADMS\Backup\Scheduled Backup\Vault"
-SET BackUpNew="%BackUpDrive%\ADMS\Backup\Scheduled Backup\Vault"
-SET BackUpSQL='%BackUpDrive%\ADMS\Backup\Scheduled Backup\Vault\SQL System Databases'
-SET BackUpSQL2="%BackUpDrive%\ADMS\Backup\Scheduled Backup\Vault\SQL System Databases"
-SET BackUpOld="%BackUpDrive%\ADMS\Backup\Scheduled Backup\Vault Old"
+SET NASbackup="%NASPath%\Backup\Scheduled Backup\Vault"
+SET BackUpNew="%BackupRootPath%\Backup\Scheduled Backup\Vault"
+SET BackUpSQL='%BackupRootPath%\Backup\Scheduled Backup\Vault\SQL System Databases'
+SET BackUpSQL2="%BackupRootPath%\Backup\Scheduled Backup\Vault\SQL System Databases"
+SET BackUpOld="%BackupRootPath%\Backup\Scheduled Backup\Vault Old"
 
 :: SET up some variables
 call :getTime now & ECHO %White%[!now!] - Setting the required variables & ECHO [!now!] - Setting the required variables>>%ScriptLog%
@@ -268,6 +277,15 @@ IF NOT "%BackupType%"=="None" (
 	IF "!count!"=="0" (
 		SET BackupType=Full
 		call :getTime now & ECHO [!now!] - No backup is present. Creating Full backup & ECHO [!now!] - No backup is present. Creating Full backup>>%ScriptLog%
+	)
+)
+
+IF NOT "%BackupType%"=="None" (
+	:: Check if Vault Pro. If not Vault Pro no Incremental Backup.
+	setlocal enabledelayedexpansion
+	IF NOT "%VaultType%"=="Professional" (
+		SET BackupType=Full
+		call :getTime now & ECHO [!now!] - Vault %VaultType% is installed. Incremental backup is not supported. Creating full backup. & ECHO [!now!] - Vault %VaultType% is installed. Incremental backup is not supported. Creating full backup.>>%ScriptLog%
 	)
 )
 
@@ -1294,7 +1312,7 @@ exit /b 0
 ::2:	::=======================================================================================================================================================================================================
 ::2:.
 ::2:	:: Info: https://help.autodesk.com/view/VAULT/2021/ENU/?guid=GUID-7FD9DAD8-0104-46FA-BCE7-11259FAB4235
-::2:	:: Switches: https://knowledge.autodesk.com/support/vault-products/learn-explore/caas/CloudHelp/cloudhelp/2018/ENU/Vault-Admin/files/GUID-56F358D7-C47B-4B6A-95CB-F402D6F2C7F9-htm.html
+::2:	:: Switches: http://help.autodesk.com/view/VAULT/2021/ENU/?guid=GUID-56F358D7-C47B-4B6A-95CB-F402D6F2C7F9
 ::2:	:: Notepad++ is the preferend editor: https://notepad-plus-plus.org/downloads/"
 ::2:.
 ::2:	::=======================================================================================================================================================================================================
@@ -1308,13 +1326,15 @@ exit /b 0
 ::2:	:: Main settings
 ::2:	SET MainDrive=C:
 ::2:	SET BackUpDrive=C:
-::2:	SET VaultLocation=C:\ADMS
+::2:	SET BackupRootPath=C:\ADMS
+::2:	SET VaultLocation=C:\ADMS\FileStore
 ::2:	SET CopyToNAS=No
 ::2:	SET NASPath=\\NAS\somewhere
 ::2:	SET AutodeskInstallLocation=C:\Program Files\Autodesk
 ::2:	SET Vault=Vault,Settings
 ::2:	SET CompanyName=Your Company Name
 ::2:	SET InstallNotepadPlus=No
+::2:	SET AutomaticUpdate=No
 ::2:.
 ::2:	:: Vault Authentication and Backup settings
 ::2:	SET WindowsAuthentication=No
