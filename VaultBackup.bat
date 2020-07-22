@@ -100,7 +100,7 @@ SET "YY=%dt:~2,2%" & SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,
 SET "datestampstart=%YYYY%%MM%%DD%" & SET "timestampstart=%HH%%Min%%Sec%" & SET "fullstampstart=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
 
 :: Console Log
-SET "LogLocation=%BackUpDrive%\%RootFolder%\Backup\Logs"
+SET "LogLocation=%BackupRootPath%\Backup\Logs"
 SET ScriptLogFolder="%LogLocation%\Script"
 IF NOT EXIST %ScriptLogFolder% (mkdir %ScriptLogFolder%)
 SET ScriptLog="%LogLocation%\Script\ScriptLog !fullstampstart!.txt"
