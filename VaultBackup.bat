@@ -49,7 +49,7 @@
 ::					- Added comments in BackupSettings.bat
 
 :: Version 1.0.11 - By Wouter Breedveld, Cadac Group B.V., 11-08-2020
-::					- Added SQl Credential type choise
+::					- Added SQL Credential type choise
 
 
 
