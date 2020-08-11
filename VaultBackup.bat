@@ -50,6 +50,7 @@
 
 :: Version 1.0.11 - By Wouter Breedveld, Cadac Group B.V., 11-08-2020
 ::					- Added SQL Credential type choise
+::                  - Added notification to event log.
 
 
 
@@ -778,7 +779,7 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	FOR /f "delims=::1: tokens=*" %%A IN ('findstr /b ::1: "%~f0"') DO @ECHO %Purple% %%A
 	ECHO %Red%============================================================================================================================================================
 	ECHO %White%No Vault installed! Exiting... & ECHO No Vault installed! Exiting...>>%ScriptLog%
-	call :SendNotification "%CompanyName% - No Vault installeed" "Autodesk Vault" "Warning"
+	call :SendNotification "%CompanyName% - No Vault installed" "Autodesk Vault" "Warning"
 	timeout 30
 	GOTO :QUIT
 	
@@ -1194,6 +1195,7 @@ GOTO:EOF
 		Set WinMessage=%~1
 		::You can replace the WinIcon value by Information, error, warning and none
 		Set WinIcon=%~3
+		EVENTCREATE /T %~3 /L APPLICATION /so "%~2" /ID 100 /D "%~1" 
 		call :WinNot
 		setlocal enabledelayedexpansion
 	)
