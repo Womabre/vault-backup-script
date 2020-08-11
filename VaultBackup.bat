@@ -45,6 +45,13 @@
 ::					- Added option to disable Automatic Updates.
 ::					- Added option to change the ADMS Path.
 
+:: Version 1.0.10 - By Wouter Breedveld, Cadac Group B.V., 24-07-2020
+::					- Added comments in BackupSettings.bat
+
+:: Version 1.0.11 - By Wouter Breedveld, Cadac Group B.V., 11-08-2020
+::					- Added SQl Credential type choise
+
+
 
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
 
@@ -66,7 +73,7 @@ setlocal enabledelayedexpansion
 ECHO Please wait...
 for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 set HostName=%host:~2%
-SET scriptversion=1.0.9
+SET scriptversion=1.0.11
 SET SwithMail=%CD%\SwithMail.exe
 SET BackupSettings=BackupSettings.bat
 
@@ -214,7 +221,7 @@ IF not exist %BackUpNew% (mkdir %BackUpNew%)
 IF not exist %CD%\MaintenanceSolution.sql (
 	call :getTime now & ECHO [!now!] - MaintenanceSolution.sql does not exist. Downloading... & ECHO [!now!] - MaintenanceSolution.sql does not exist. Downloading...>>%ScriptLog%
 	curl https://raw.githubusercontent.com/olahallengren/sql-server-maintenance-solution/master/MaintenanceSolution.sql --output %CD%\MaintenanceSolution.sql > nul 2> nul
-	sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -i MaintenanceSolution.sql > nul 2> nul
+	sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -i MaintenanceSolution.sql > nul 2> nul
 )
 
 :: Download SwithMail
@@ -231,11 +238,11 @@ if not exist %SysInfo% (
 )
 
 :: Check recovery mode KnowledgeVaultMaster
-sqlcmd -S %HostName%\AUTODESKVAULT -U %SAuser% -P %SApassword% -Q "SELECT DATABASEPROPERTYEX('KnowledgeVaultMaster', 'Recovery');" > RecoveryMode.txt
+sqlcmd -S %HostName%\AUTODESKVAULT %SQLAuth% -Q "SELECT DATABASEPROPERTYEX('KnowledgeVaultMaster', 'Recovery');" > RecoveryMode.txt
 findstr /m /C:"SIMPLE" RecoveryMode.txt > nul 2> nul
 IF %errorlevel% EQU 1 (
 	call :getTime now & ECHO [!now!] - Recovery mode of KnowledgeVaultMaster not set to SIMPLE. Changing... & ECHO [!now!] - Recovery mode of KnowledgeVaultMaster not set to SIMPLE. Changing...>>%ScriptLog%
-	sqlcmd -S %HostName%\AUTODESKVAULT -U %SAuser% -P %SApassword% -Q "ALTER DATABASE KnowledgeVaultMaster SET RECOVERY SIMPLE"
+	sqlcmd -S %HostName%\AUTODESKVAULT %SQLAuth% -Q "ALTER DATABASE KnowledgeVaultMaster SET RECOVERY SIMPLE"
 )
 del RecoveryMode.txt
 
@@ -296,8 +303,8 @@ IF NOT "%BackupType%"=="None" (
 		BREAK>%SQLIntegrityCheckLog%
 		for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 		set HostName=%host:~2%
-		sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "EXECUTE dbo.DatabaseIntegrityCheck @Databases = 'USER_DATABASES'" -b -o %SQLIntegrityCheckLog% > nul 2> nul
-		sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "EXECUTE dbo.DatabaseIntegrityCheck @Databases = 'SYSTEM_DATABASES'" -b -o %SQLIntegrityCheckLog% > nul 2> nul
+		sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.DatabaseIntegrityCheck @Databases = 'USER_DATABASES'" -b -o %SQLIntegrityCheckLog% > nul 2> nul
+		sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.DatabaseIntegrityCheck @Databases = 'SYSTEM_DATABASES'" -b -o %SQLIntegrityCheckLog% > nul 2> nul
 		:: Set time SQL Maintenance finished
 		FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
@@ -406,7 +413,7 @@ IF %errorlevel% EQU 0 (
 		BREAK>%SQLBackupLog%	
 		for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 		set HostName=%host:~2%
-		sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "EXECUTE dbo.DatabaseBackup @Databases = 'SYSTEM_DATABASES', @BackupType = 'FULL', @Directory = %BackUpSQL%" -b -o %SQLBackupLog% > nul 2> nul
+		sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.DatabaseBackup @Databases = 'SYSTEM_DATABASES', @BackupType = 'FULL', @Directory = %BackUpSQL%" -b -o %SQLBackupLog% > nul 2> nul
 		:: Set time SQL Maintenance finished
 		FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
@@ -533,8 +540,8 @@ IF %errorlevel% EQU 0 (
 			BREAK>%SQLMaintenanceLog%
 			for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 			set HostName=%host:~2%
-			sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "EXECUTE dbo.IndexOptimize @Databases = 'USER_DATABASES'" -b -o %SQLMaintenanceLog% > nul 2> nul
-			sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "EXECUTE dbo.DatabaseBackup @Databases = 'SYSTEM_DATABASES', @BackupType = 'FULL', @Directory = '%BackUpNew%'" -b -o %SQLMaintenanceLog% > nul 2> nul
+			sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.IndexOptimize @Databases = 'USER_DATABASES'" -b -o %SQLMaintenanceLog% > nul 2> nul
+			sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.DatabaseBackup @Databases = 'SYSTEM_DATABASES', @BackupType = 'FULL', @Directory = '%BackUpNew%'" -b -o %SQLMaintenanceLog% > nul 2> nul
 
 			:: Set time SQL Maintenance finished
 			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
@@ -1144,6 +1151,18 @@ GOTO:EOF
 	(
 		exit /b
 	)
+	
+:: Create Vault authentication string
+:SQLAuthentication
+	if "%SQLAuthentication%"=="Default" (
+		SET SQLAuth=-E
+	)
+	if "%SQLAuthentication%"=="Specified" (
+		SET SQLAuth=-U %SAuser% -P %SApassword%
+	)
+	(
+		exit /b
+	)
 :: Create Vault backup options string
 :BackupOptions
 	if "%BackupStandardContentCenter%"=="No" (
@@ -1299,8 +1318,8 @@ exit /b 0
 	
 	ECHO.>>%VaultSettings%
 	ECHO ============================== SQL info ==============================   >>%VaultSettings%
-	sqlcmd -S %HostName%\%VaultDatabaseInstance% -E -Q "SELECT @@VERSION">>%VaultSettings%
-	sqlcmd -S %HostName%\%VaultDatabaseInstance% -U %SAuser% -P %SApassword% -Q "SELECT cpu_count AS [Logical CPU Count], hyperthread_ratio AS [CPU Threads],cpu_count/hyperthread_ratio AS [Physical CPU Count],physical_memory_kb/1024 AS [Physical Memory in MB] from sys.dm_os_sys_info">>%VaultSettings%
+	sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "SELECT @@VERSION">>%VaultSettings%
+	sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "SELECT cpu_count AS [Logical CPU Count], hyperthread_ratio AS [CPU Threads],cpu_count/hyperthread_ratio AS [Physical CPU Count],physical_memory_kb/1024 AS [Physical Memory in MB] from sys.dm_os_sys_info">>%VaultSettings%
 
 	(
 		exit /b
@@ -1330,8 +1349,10 @@ exit /b 0
 ::2:	SET VaultLocation=C:\ADMS\FileStore
 ::2:	SET CopyToNAS=No
 ::2:	SET NASPath=\\NAS\somewhere
+::2:	:: When CopyToNAS is active only full backups are supported.
 ::2:	SET AutodeskInstallLocation=C:\Program Files\Autodesk
 ::2:	SET Vault=Vault,Settings
+::2:	:: All vaults comma separated
 ::2:	SET CompanyName=Your Company Name
 ::2:	SET InstallNotepadPlus=No
 ::2:	SET AutomaticUpdate=No
@@ -1366,7 +1387,7 @@ exit /b 0
 ::2:	SET ValidationOnDay=6
 ::2:.
 ::2:	SET DefragmentOnMonth=1,2,3,4,5,6,7,8,9,10,11,12
-::2:	SET DefragmentOnWeek=1,2,3,4,5,6wprd
+::2:	SET DefragmentOnWeek=1,2,3,4,5,6
 ::2:	SET DefragmentOnDay=7
 ::2:.
 ::2:	SET B2BMigrationOnMonth=1,2,3,4,5,6,7,8,9,10,11,12
@@ -1405,12 +1426,15 @@ exit /b 0
 ::2:	SET EMailFrom=from@domain.com
 ::2:	SET EmailToSuccess=succes@domain.com
 ::2:	SET EmailToFail=fail@domain.com
+::2:	:: Multiple email adresses are possible. Comma separated, no space.
 ::2:.
 ::2:	::=======================================================================================================================================================================================================
 ::2:	::=======================================================================================================================================================================================================
 ::2:	::=======================================================================================================================================================================================================
 ::2:.
 ::2:	:: Other settings - only edit when instructed to!
+::2:    :: "Default" for -E Switch. "Specified" for user and pass.
+::2:    SET SQLAuthentication=Default
 ::2:	SET SAuser=sa
 ::2:	SET SApassword=AutodeskVault@26200
 ::2:	SET VaultDatabaseInstance=AUTODESKVAULT
