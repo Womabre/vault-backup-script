@@ -1195,7 +1195,7 @@ GOTO:EOF
 		Set WinMessage=%~1
 		::You can replace the WinIcon value by Information, error, warning and none
 		Set WinIcon=%~3
-		EVENTCREATE /T %~3 /L APPLICATION /so "%~2" /ID 100 /D "%~1" 
+		EVENTCREATE /T %~3 /L APPLICATION /so "%~2" /ID 100 /D "%~1" > nul 2> nul
 		call :WinNot
 		setlocal enabledelayedexpansion
 	)
