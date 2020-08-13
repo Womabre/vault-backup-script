@@ -219,21 +219,21 @@ IF "%CopyToNAS%"=="Yes" (
 IF not exist %BackUpNew% (mkdir %BackUpNew%)
 
 :: Download SQL Maintenance Solution
-IF not exist %CD%\MaintenanceSolution.sql (
+IF not exist "%CD%\MaintenanceSolution.sql" (
 	call :getTime now & ECHO [!now!] - MaintenanceSolution.sql does not exist. Downloading... & ECHO [!now!] - MaintenanceSolution.sql does not exist. Downloading...>>%ScriptLog%
-	curl https://raw.githubusercontent.com/olahallengren/sql-server-maintenance-solution/master/MaintenanceSolution.sql --output %CD%\MaintenanceSolution.sql > nul 2> nul
+	curl https://raw.githubusercontent.com/olahallengren/sql-server-maintenance-solution/master/MaintenanceSolution.sql --output "%CD%\MaintenanceSolution.sql" > nul 2> nul
 	sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -i MaintenanceSolution.sql > nul 2> nul
 )
 
 :: Download SwithMail
-IF not exist %SwithMail% (
+IF not exist "%SwithMail%" (
 	call :getTime now & ECHO [!now!] - SwithMail.exe does not exist. Downloading version 2.2.4.0... & ECHO [!now!] - SwithMail.exe does not exist. Downloading version 2.2.4.0...>>%ScriptLog%
 	curl "https://raw.githubusercontent.com/Womabre/vault-backup-script/master/SwithMail.exe" --output "%CD%\SwithMail.exe" > nul 2> nul
 	curl "https://raw.githubusercontent.com/Womabre/vault-backup-script/master/SwithMailreadme.txt" --output "%CD%\SwithMail Readme.txt" > nul 2> nul
 )
 
 :: Export sys info
-if not exist %SysInfo% (
+if not exist "%SysInfo%" (
 	call :getTime now & ECHO [!now!] - System info file does not exist. Exporting... & ECHO [!now!] - System info file does not exist. Exporting...>>%ScriptLog%
 	msinfo32 /nfo %SysInfo% > nul 2> nul
 )
@@ -367,10 +367,7 @@ call :reset_error
 findstr /m /C:"%CheckString%" %Log% > nul 2> nul
 IF %errorlevel% EQU 0 (
 	SET successbool=1
-	set "End=%TIME%"
-	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - %Green%Successfully finished backup opperations%White% & ECHO [!now!] - Successfully finished backup opperations>>%ScriptLog%
-	call :getTime now & ECHO [!now!] - Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
 	GOTO :SQLBackup
 ) else (
 	GOTO :Check2
@@ -381,10 +378,7 @@ call :reset_error
 findstr /m /C:"%CheckString2%" %Log% > nul 2> nul
 IF %errorlevel% EQU 0 (
 	SET successbool=1
-	set "End=%TIME%"
-	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - %Green%Successfully finished backup opperations%White% & ECHO [!now!] - Successfully finished backup opperations>>%ScriptLog%
-	call :getTime now & ECHO [!now!] - Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
 	GOTO :SQLBackup
 ) else (
 	GOTO :Check3
@@ -394,14 +388,10 @@ IF %errorlevel% EQU 0 (
 call :reset_error
 findstr /m /C:"%CheckString3%" %Log% > nul 2> nul
 IF %errorlevel% EQU 0 (
-	set "End=%TIME%"
-	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - %Red%Failed creating incremental backup. A Vault or Library has been added or removed. Creating full backup.%White% & ECHO [!now!] - Failed creating incremental backup. A Vault or Library has been added or removed. Creating full backup.>>%ScriptLog%
 	SET BackupType=Full
 	GOTO :Backup
 ) else (
-	set "End=%TIME%"
-	call :timediff Elapsed Start End
 	SET successbool=0
 	GOTO :Close
 )
@@ -639,6 +629,8 @@ SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup has failed.<br /^>A
 SET SubjectError="WARNING Vault backup has errors - %fullstampendbackup%"
 
 IF %successbool% EQU 1 (
+	set "End=%TIME%"
+	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - %Green%Success%White% & ECHO [!now!] - Success>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Sending logfile to emailaddress & ECHO [!now!] - Sending logfile to emailaddress>>%ScriptLog%
@@ -652,6 +644,8 @@ IF %successbool% EQU 1 (
 )
 
 IF %successbool% EQU 0 (
+	set "End=%TIME%"
+	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - %Red%Failed%White% & ECHO [!now!] - Failed >>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Sending logfile to emailaddress & ECHO [!now!] - Sending logfile to emailaddress>>%ScriptLog%
@@ -665,6 +659,8 @@ IF %successbool% EQU 0 (
 )
 
 IF %successbool% EQU 2 (
+	set "End=%TIME%"
+	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - %Red%There are errors. Check logs.%White% & ECHO [!now!] - There are errors. Check logs. >>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Sending logfile to emailaddress & ECHO [!now!] - Sending logfile to emailaddress>>%ScriptLog%
@@ -1147,7 +1143,12 @@ GOTO:EOF
 		SET VaultAuth=-WA
 	)
 	if "%WindowsAuthentication%"=="No" (
-		SET VaultAuth=-VU"%BackupUser%" -VP"%BackupPassword%"
+		if "%SQLAuthentication%"=="Default" (
+			SET VaultAuth=-VU"%BackupUser%" -VP"%BackupPassword%"
+		)
+		if "%SQLAuthentication%"=="Specified" (
+			SET VaultAuth=-VU"%BackupUser%" -VP"%BackupPassword%" -DBU"%SAuser%" -DBP"%SApassword%"
+		)
 	)
 	(
 		exit /b
@@ -1509,7 +1510,7 @@ exit /b 0
 ::3:	:: Import Settings
 ::3:	IF NOT EXIST "BackupSettings.bat" (
 ::3:		echo Settings file not found!
-::3:		echo run NXTdim_Vault_Backup.bat to create BackupSettings.bat with default settings.
+::3:		echo run VaultBackup.bat to create BackupSettings.bat with default settings.
 ::3:		pause
 ::3:		exit
 ::3:	) ELSE (
@@ -1548,6 +1549,7 @@ exit /b 0
 ::3:			Set WinMessage=%~1
 ::3:			::You can replace the WinIcon value by Information, error, warning and none
 ::3:			Set WinIcon=%~3
+::3:			EVENTCREATE /T %~3 /L APPLICATION /so "%~2" /ID 100 /D "%~1" > nul 2> nul
 ::3:			call :WinNot
 ::3:			setlocal enabledelayedexpansion
 ::3:		)
