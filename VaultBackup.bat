@@ -52,6 +52,13 @@
 ::					- Added SQL Credential type choise
 ::                  - Added notification to event log.
 
+:: Version 1.0.12 - By Wouter Breedveld, Cadac Group B.V., 14-08-2020
+::					- SQL System databases only get backedup when a Vault backup is scheduled.
+::					- SQL validation only runs when a Vault backup is scheduled.
+::					- Fixed email not being sent when no backup was created.
+::					- Corrected some typos.
+
+
 
 
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
@@ -74,7 +81,7 @@ setlocal enabledelayedexpansion
 ECHO Please wait...
 for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 set HostName=%host:~2%
-SET scriptversion=1.0.11
+SET scriptversion=1.0.12
 SET SwithMail=%CD%\SwithMail.exe
 SET BackupSettings=BackupSettings.bat
 
@@ -233,7 +240,7 @@ IF not exist "%SwithMail%" (
 )
 
 :: Export sys info
-if not exist "%SysInfo%" (
+if not exist %SysInfo% (
 	call :getTime now & ECHO [!now!] - System info file does not exist. Exporting... & ECHO [!now!] - System info file does not exist. Exporting...>>%ScriptLog%
 	msinfo32 /nfo %SysInfo% > nul 2> nul
 )
@@ -257,7 +264,7 @@ FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "d
 SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 SET "fullstampfreespace=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
 SET SubjectFail="WARNING. Vault backup error. - %fullstampfreespace%"
-SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup failed<br /^>There is not enough space on the %BackUpDrive% drive<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remeber to eat healthy, get enough sleep and backup your computer"
+SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup failed<br /^>There is not enough space on the %BackUpDrive% drive<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
 
 IF NOT "%BackupType%"=="None" (
 	:: Check if enough free space is available
@@ -298,6 +305,11 @@ IF NOT "%BackupType%"=="None" (
 )
 
 :SQLIntegrityCheck
+	IF "%BackupType%"=="None" (
+		call :getTime now & ECHO [!now!] - Not running SQL Integrity Check at this moment & ECHO [!now!] - Not running SQL Integrity Check at this moment>>%ScriptLog%
+		SET "fullstampendSQLIntergity=Didn't run SQL Integrity Check
+		goto :Backup
+	)
 	IF NOT "%ServerConfig%"=="VaultOnly" (
 		call :getTime now & ECHO [!now!] - Running SQL Integrity Check & ECHO [!now!] - Running SQL Integrity Check>>%ScriptLog%
 		IF NOT EXIST %SQLIntegrityCheckLogFolder% (mkdir %SQLIntegrityCheckLogFolder%)
@@ -330,7 +342,7 @@ IF NOT "%BackupType%"=="None" (
 :: Do a full or incremental backup
 IF "%BackupType%"=="Full" (
 	call :ResetServices
-	call :getTime now & ECHO [!now!] - Creating a new Full backup and deleting the old if successfull & ECHO [!now!] - Creating a new Full backup and deleting the old if successfull>>%ScriptLog%
+	call :getTime now & ECHO [!now!] - Creating a new Full backup and deleting the old if successful & ECHO [!now!] - Creating a new Full backup and deleting the old if successful>>%ScriptLog%
 	IF exist %BackUpNew% ( MOVE /Y %BackUpNew% %BackUpOld% > nul 2> nul )
 	IF not exist %BackUpNew% (mkdir %BackUpNew%)
 	call :getTime now & ECHO [!now!] - Now creating full backup on local machine & ECHO [!now!] - Now creating full backup on local machine>>%ScriptLog%
@@ -361,13 +373,13 @@ IF "%BackupType%"=="None" (
 	goto :SQLBackup
 )
 
-:: Check if backup is successfull
+:: Check if backup is successful
 :Check1
 call :reset_error
 findstr /m /C:"%CheckString%" %Log% > nul 2> nul
 IF %errorlevel% EQU 0 (
 	SET successbool=1
-	call :getTime now & ECHO [!now!] - %Green%Successfully finished backup opperations%White% & ECHO [!now!] - Successfully finished backup opperations>>%ScriptLog%
+	call :getTime now & ECHO [!now!] - %Green%Successfully finished backup operations%White% & ECHO [!now!] - Successfully finished backup operations>>%ScriptLog%
 	GOTO :SQLBackup
 ) else (
 	GOTO :Check2
@@ -378,7 +390,7 @@ call :reset_error
 findstr /m /C:"%CheckString2%" %Log% > nul 2> nul
 IF %errorlevel% EQU 0 (
 	SET successbool=1
-	call :getTime now & ECHO [!now!] - %Green%Successfully finished backup opperations%White% & ECHO [!now!] - Successfully finished backup opperations>>%ScriptLog%
+	call :getTime now & ECHO [!now!] - %Green%Successfully finished backup operations%White% & ECHO [!now!] - Successfully finished backup operations>>%ScriptLog%
 	GOTO :SQLBackup
 ) else (
 	GOTO :Check3
@@ -397,6 +409,11 @@ IF %errorlevel% EQU 0 (
 )
 
 :SQLBackup
+	IF "%BackupType%"=="None" (
+		call :getTime now & ECHO [!now!] - Not creating a SQL backup at this moment & ECHO [!now!] - Not creating a SQL backup at this moment>>%ScriptLog%
+		SET "fullstampendSQLbackup=Didn't backup SQL
+		goto :Validation
+	)
 	IF NOT "%ServerConfig%"=="VaultOnly" (
 		call :getTime now & ECHO [!now!] - Running SQL Backup. Backup system databases. & ECHO [!now!] - Running SQL Backup. Backup system databases.>>%ScriptLog%
 		IF NOT EXIST %SQLBackupLogFolder% (mkdir %SQLBackupLogFolder%)
@@ -619,12 +636,17 @@ IF %errorlevel% EQU 0 (
 
 :Close
 set "End=%TIME%"
+call :timediff Elapsed Start End
 
-SET SubjectSuccess="Vault backup successfull - %fullstampendbackup%"
-SET BodySuccess="Hi,<br /^><br /^>Attached is the log file of the Vault backup.<br /^>Opperations started: %fullstampstart%<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished: !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Validation finished: !fullstampendvalidate!<br /^>Defragmentation finished: !fullstampenddefrag!<br /^>B2BMigration finished: !fullstampendB2B!<br /^>SQLMaintenance finished: !fullstampendSQL!<br /^>Deleting old backup from NAS finished: !fullstampenddelnas!<br /^>Moving new backup to NAS finished: !fullstampendmove!<br /^>Deleting local backup finished: !fullstampenddellocal!<br /^>Duration: !Elapsed:~0,8!<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remeber to eat healthy, get enough sleep and backup your computer"
+IF "%BackupType%"=="None" (
+	SET SubjectSuccess="Vault operations successful"
+) ELSE (
+	SET SubjectSuccess="Vault backup successful - %fullstampendbackup%"
+)
+SET BodySuccess="Hi,<br /^><br /^>Attached is the log file of the Vault backup.<br /^>Operations started: %fullstampstart%<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished: !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Validation finished: !fullstampendvalidate!<br /^>Defragmentation finished: !fullstampenddefrag!<br /^>B2BMigration finished: !fullstampendB2B!<br /^>SQLMaintenance finished: !fullstampendSQL!<br /^>Deleting old backup from NAS finished: !fullstampenddelnas!<br /^>Moving new backup to NAS finished: !fullstampendmove!<br /^>Deleting local backup finished: !fullstampenddellocal!<br /^>Duration: %Elapsed:~0,8%<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
 
 SET SubjectFail="WARNING Vault backup has failed - %fullstampendbackup%"
-SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup has failed.<br /^>Attached is the log file of the Vault backup.<br /^>Backup started !fullstampstart!<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Duration: !Elapsed:~0,8!<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remeber to eat healthy, get enough sleep and backup your computer"
+SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup has failed.<br /^>Attached is the log file of the Vault backup.<br /^>Backup started !fullstampstart!<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Duration: %Elapsed:~0,8%<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
 
 SET SubjectError="WARNING Vault backup has errors - %fullstampendbackup%"
 
@@ -634,10 +656,16 @@ IF %successbool% EQU 1 (
 	call :getTime now & ECHO [!now!] - %Green%Success%White% & ECHO [!now!] - Success>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Sending logfile to emailaddress & ECHO [!now!] - Sending logfile to emailaddress>>%ScriptLog%
-	if "%EnableMail%"=="Yes" (
-		"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectSuccess% /a %Log%^|%ScriptLog% /b %BodySuccess% /html
+	IF "%BackupType%"=="None" (
+		if "%EnableMail%"=="Yes" (
+			"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectSuccess% /a %ScriptLog% /b %BodySuccess% /html
+		)
+	) ELSE (
+		if "%EnableMail%"=="Yes" (
+			"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectSuccess% /a %Log%^|%ScriptLog% /b %BodySuccess% /html
+		)
 	)
-	call :SendNotification "%CompanyName% Vault Backup Successfull!" "Autodesk Vault %VaultType% %VaultVersion%" "Information"
+	call :SendNotification "%CompanyName% Vault Backup Successful!" "Autodesk Vault %VaultType% %VaultVersion%" "Information"
 	call :getTime now & ECHO [!now!] - Closing window in 10 minutes & ECHO [!now!] - Closing window in 10 minutes>>%ScriptLog%
 	timeout 600
 	GOTO :QUIT
@@ -1299,7 +1327,7 @@ exit /b 0
 	ECHO Outgoing mail user:			%SvrUser%>>%VaultSettings%
 	ECHO Outgoing mail password:			%SvrPass%>>%VaultSettings%
 	ECHO EMail From:				%EMailFrom%>>%VaultSettings%
-	ECHO Email to when backup successfull:	%EmailToSuccess%>>%VaultSettings%
+	ECHO Email to when backup successful:	%EmailToSuccess%>>%VaultSettings%
 	ECHO Email to when backup failed:		%EmailToFail%>>%VaultSettings%
 	
 	ECHO.>>%VaultSettings%
@@ -1351,6 +1379,7 @@ exit /b 0
 ::2:	SET BackupRootPath=C:\ADMS
 ::2:	SET VaultLocation=C:\ADMS\FileStore
 ::2:	SET CopyToNAS=No
+::2:	:: Net use \\NAS\somewhere /user:USERNAME PASSWORD
 ::2:	SET NASPath=\\NAS\somewhere
 ::2:	:: When CopyToNAS is active only full backups are supported.
 ::2:	SET AutodeskInstallLocation=C:\Program Files\Autodesk
@@ -1439,7 +1468,7 @@ exit /b 0
 ::2:    :: "Default" for -E Switch. "Specified" for user and pass.
 ::2:    SET SQLAuthentication=Default
 ::2:	SET SAuser=sa
-::2:	SET SApassword=AutodeskVault@26200
+::2:	SET "SApassword=AutodeskVault@26200"
 ::2:	SET VaultDatabaseInstance=AUTODESKVAULT
 ::2:	:: Server configuration "VaultOnly", "SQLOnly", "Both"
 ::2:	SET ServerConfig=Both
@@ -1527,7 +1556,7 @@ exit /b 0
 ::3:	SET BodyTest=Hello world
 ::3:.
 ::3:	if "%EnableMail%"=="Yes" (
-::3:		"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub "%SubjectTest%" /b "%BodyTest%"
+::3:		"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub "%SubjectTest%" /b "%BodyTest%" \html
 ::3:	)
 ::3:.
 ::3:	call :SendNotification "%BodyTest%" "%SubjectTest%" "Information"
