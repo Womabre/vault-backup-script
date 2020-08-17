@@ -57,6 +57,12 @@
 ::					- SQL validation only runs when a Vault backup is scheduled.
 ::					- Fixed email not being sent when no backup was created.
 ::					- Corrected some typos.
+::					- Added option to send logs in the email body or as attachment.
+
+:: Version 1.0.13 - By Wouter Breedveld, Cadac Group B.V., 17-08-2020
+::					- Fixed CopyToNAS errorlevel.
+::					- Added mount share as drive for CopyToNAS
+::					- Fixed DayOfWeek (Sunday is 0, not 1)
 
 
 
@@ -81,8 +87,8 @@ setlocal enabledelayedexpansion
 ECHO Please wait...
 for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 set HostName=%host:~2%
-SET scriptversion=1.0.12
-SET SwithMail=%CD%\SwithMail.exe
+SET scriptversion=1.0.13
+SET "SwithMail=%CD%\SwithMail.exe"
 SET BackupSettings=BackupSettings.bat
 
 :: Check admin
@@ -233,7 +239,7 @@ IF not exist "%CD%\MaintenanceSolution.sql" (
 )
 
 :: Download SwithMail
-IF not exist "%SwithMail%" (
+IF not exist %SwithMail% (
 	call :getTime now & ECHO [!now!] - SwithMail.exe does not exist. Downloading version 2.2.4.0... & ECHO [!now!] - SwithMail.exe does not exist. Downloading version 2.2.4.0...>>%ScriptLog%
 	curl "https://raw.githubusercontent.com/Womabre/vault-backup-script/master/SwithMail.exe" --output "%CD%\SwithMail.exe" > nul 2> nul
 	curl "https://raw.githubusercontent.com/Womabre/vault-backup-script/master/SwithMailreadme.txt" --output "%CD%\SwithMail Readme.txt" > nul 2> nul
@@ -595,8 +601,7 @@ IF %errorlevel% EQU 0 (
 			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 			SET "fullstampendmove=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
-			call :reset_error
-			IF %errorlevel% EQU 0 (
+			IF %errorlevel% LSS 8 (
 				SET successbool=1
 				call :getTime now & ECHO [!now!] - Deleting backup on local disk & ECHO [!now!] - Deleting backup on local disk>>%ScriptLog%
 				RMDIR /S /Q %BackUpNew%>>%CopyToNASLog%
@@ -650,6 +655,63 @@ SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup has failed.<br /^>A
 
 SET SubjectError="WARNING Vault backup has errors - %fullstampendbackup%"
 
+ECHO %BodySuccess%>>tempbodysuccess.txt
+ECHO ^<br /^>^<br /^>>>tempbodysuccess.txt
+ECHO %BodyFail%>>tempbodyfail.txt
+ECHO ^<br /^>^<br /^>>>tempbodyfail.txt
+
+set "line="
+for /F "tokens=1* delims=:" %%a in ('findstr /N "^" %ScriptLog%') do (
+	if not "%%~a" == "%n%" (
+		echo(%%b^<br /^>
+	) else (
+		set line=%%b
+		setlocal enableDelayedExpansion
+		<nul set /P "=!line!"
+		endlocal
+	)
+) >> "tempbodysuccess.txt"
+
+set "line="
+for /F "tokens=1* delims=:" %%a in ('findstr /N "^" %ScriptLog%') do (
+	if not "%%~a" == "%n%" (
+		echo(%%b^<br /^>
+	) else (
+		set line=%%b
+		setlocal enableDelayedExpansion
+		<nul set /P "=!line!"
+		endlocal
+	)
+) >> "tempbodyfail.txt"
+
+IF NOT "%BackupType%"=="None" (
+	ECHO ^<br /^>^<br /^>>>tempbodysuccess.txt
+	ECHO ^<br /^>^<br /^>>>tempbodyfail.txt
+	set "line="
+	for /F "tokens=1* delims=:" %%a in ('findstr /N "^" %Log%') do (
+		if not "%%~a" == "%n%" (
+			echo(%%b^<br /^>
+		) else (
+			set line=%%b
+			setlocal enableDelayedExpansion
+			<nul set /P "=!line!"
+			endlocal
+		)
+	) >> "tempbodysuccess.txt"
+
+	set "line="
+	for /F "tokens=1* delims=:" %%a in ('findstr /N "^" %Log%') do (
+		if not "%%~a" == "%n%" (
+			echo(%%b^<br /^>
+		) else (
+			set line=%%b
+			setlocal enableDelayedExpansion
+			<nul set /P "=!line!"
+			endlocal
+		)
+	) >> "tempbodyfail.txt"
+)
+
 IF %successbool% EQU 1 (
 	set "End=%TIME%"
 	call :timediff Elapsed Start End
@@ -658,15 +720,27 @@ IF %successbool% EQU 1 (
 	call :getTime now & ECHO [!now!] - Sending logfile to emailaddress & ECHO [!now!] - Sending logfile to emailaddress>>%ScriptLog%
 	IF "%BackupType%"=="None" (
 		if "%EnableMail%"=="Yes" (
-			"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectSuccess% /a %ScriptLog% /b %BodySuccess% /html
+			if "%Attachment%"=="Yes" (
+				"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToSuccess%" /sub %SubjectSuccess% /a %ScriptLog% /b %BodySuccess% /html
+			)
+			if "%Attachment%"=="No" (
+				"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToSuccess%" /sub %SubjectSuccess% /btxt "%CD%/tempbodysuccess.txt" /html
+			)
 		)
 	) ELSE (
 		if "%EnableMail%"=="Yes" (
-			"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectSuccess% /a %Log%^|%ScriptLog% /b %BodySuccess% /html
+			if "%Attachment%"=="Yes" (
+				"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToSuccess%" /sub %SubjectSuccess% /a %Log%^|%ScriptLog%% /b %BodySuccess% /html
+			)
+			if "%Attachment%"=="No" (
+				"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToSuccess%" /sub %SubjectSuccess% /btxt "%CD%/tempbodysuccess.txt" /html
+			)
 		)
 	)
 	call :SendNotification "%CompanyName% Vault Backup Successful!" "Autodesk Vault %VaultType% %VaultVersion%" "Information"
 	call :getTime now & ECHO [!now!] - Closing window in 10 minutes & ECHO [!now!] - Closing window in 10 minutes>>%ScriptLog%
+	del tempbodysuccess.txt
+	del tempbodyfail.txt
 	timeout 600
 	GOTO :QUIT
 )
@@ -677,11 +751,29 @@ IF %successbool% EQU 0 (
 	call :getTime now & ECHO [!now!] - %Red%Failed%White% & ECHO [!now!] - Failed >>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Sending logfile to emailaddress & ECHO [!now!] - Sending logfile to emailaddress>>%ScriptLog%
-	if "%EnableMail%"=="Yes" (
-		"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectFail% /a %Log%^|%ScriptLog% /b %BodyFail% /html
+	IF "%BackupType%"=="None" (
+		if "%EnableMail%"=="Yes" (
+			if "%Attachment%"=="Yes" (
+				"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectFail% /a %ScriptLog% /b %BodyFail% /html
+			)
+			if "%Attachment%"=="No" (
+				"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectFail% /btxt "%CD%/tempbodyfail.txt" /html
+			)
+		)
+	) ELSE (
+		if "%EnableMail%"=="Yes" (
+			if "%Attachment%"=="Yes" (
+				"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectFail% /a %Log%^|%ScriptLog% /b %BodyFail% /html
+			)
+			if "%Attachment%"=="No" (
+				"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectFail% /btxt "%CD%/tempbodyfail.txt" /html
+			)
+		)
 	)
 	call :SendNotification "%CompanyName% Vault Backup Failed!" "Autodesk Vault %VaultType% %VaultVersion%" "Error"
 	call :getTime now &	ECHO [!now!] - Closing window in 10 minutes & ECHO [!now!] - Closing window in 10 minutes>>%ScriptLog%
+	del tempbodysuccess.txt
+	del tempbodyfail.txt
 	timeout 600
 	GOTO :QUIT
 )
@@ -692,11 +784,29 @@ IF %successbool% EQU 2 (
 	call :getTime now & ECHO [!now!] - %Red%There are errors. Check logs.%White% & ECHO [!now!] - There are errors. Check logs. >>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Sending logfile to emailaddress & ECHO [!now!] - Sending logfile to emailaddress>>%ScriptLog%
+	IF "%BackupType%"=="None" (
+		if "%EnableMail%"=="Yes" (
+			if "%Attachment%"=="Yes" (
+				"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectError% /a %ScriptLog% /b %BodyFail% /html
+			)
+			if "%Attachment%"=="No" (
+				"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectError% /btxt "%CD%/tempbodyfail.txt" /html
+			)
+		)
+	) ELSE (
 	if "%EnableMail%"=="Yes" (
-		"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectError% /a %Log%^|%ScriptLog% /b %BodySuccess% /html
+			if "%Attachment%"=="Yes" (
+				"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectError% /a %Log%^|%ScriptLog% /b %BodyFail% /html
+			)
+			if "%Attachment%"=="No" (
+				"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectError% /btxt "%CD%/tempbodyfail.txt" /html
+			)
+		)
 	)
 	call :SendNotification "%CompanyName% Vault Backup has errors!" "Autodesk Vault %VaultType% %VaultVersion%" "Warning"
 	call :getTime now &	ECHO [!now!] - Closing window in 10 minutes & ECHO [!now!] - Closing window in 10 minutes>>%ScriptLog%
+	del tempbodysuccess.txt
+	del tempbodyfail.txt
 	timeout 600
 	GOTO :QUIT
 )
@@ -833,7 +943,6 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	call :getTime now
 	ECHO [!now!] - Closing ADMS Console if open & ECHO [!now!] - Closing ADMS Console if open>>%ScriptLog%
 	taskkill /F /IM Connectivity.ADMSConsole.exe > nul 2> nul
-	call :reset_error
 	IF %errorlevel% NEQ 0 (
 		call :getTime now
 		ECHO [!now!] - Successfully closed running ADMS Console & ECHO [!now!] - Successfully closed running ADMS Console>>%ScriptLog%
@@ -852,7 +961,6 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	)
 
 	:: If error flag SET, we do not have admin.
-	call :reset_error
 	IF '%errorlevel%' NEQ '0' (
 		ECHO %White%Requesting administrative privileges...
 		GOTO UACPrompt
@@ -880,7 +988,6 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	IF "%VALUE%"=="1" (
 		ECHO %White%QuickEdit is enabled. Disabling...
 		REG ADD %REGKEY% /v %REGVAL% /t REG_DWORD /d "0" /f
-		call :reset_error
 		IF "%ERRORLEVEL%"=="0" (
 			ECHO QuickEdit disabled successfully!
 		) ELSE (
@@ -1167,6 +1274,14 @@ GOTO:EOF
 
 :: Create Vault authentication string
 :Authentication
+	::SQL Authentication
+	if "%SQLAuthentication%"=="Default" (
+		SET SQLAuth=-E
+	)
+	if "%SQLAuthentication%"=="Specified" (
+		SET SQLAuth=-U "%SAuser%" -P "%SApassword%"
+	)
+	
 	if "%WindowsAuthentication%"=="Yes" (
 		SET VaultAuth=-WA
 	)
@@ -1182,17 +1297,6 @@ GOTO:EOF
 		exit /b
 	)
 	
-:: Create Vault authentication string
-:SQLAuthentication
-	if "%SQLAuthentication%"=="Default" (
-		SET SQLAuth=-E
-	)
-	if "%SQLAuthentication%"=="Specified" (
-		SET SQLAuth=-U %SAuser% -P %SApassword%
-	)
-	(
-		exit /b
-	)
 :: Create Vault backup options string
 :BackupOptions
 	if "%BackupStandardContentCenter%"=="No" (
@@ -1238,6 +1342,9 @@ GOTO:EOF
 	
 :reset_error
 exit /b 0
+
+
+
 
 :ExportSettings
 	call :getTime now & ECHO [!now!] - Exporting settings & ECHO [!now!] - Exporting settings>>%ScriptLog%
@@ -1379,8 +1486,10 @@ exit /b 0
 ::2:	SET BackupRootPath=C:\ADMS
 ::2:	SET VaultLocation=C:\ADMS\FileStore
 ::2:	SET CopyToNAS=No
-::2:	:: Net use \\NAS\somewhere /user:USERNAME PASSWORD
-::2:	SET NASPath=\\NAS\somewhere
+::2:	if "%CopyToNAS%"=="Yes" (
+::2:		net use Y: \\NAS\somewhere /user:USERNAME PASSWORD
+::2:		SET NASPath=Y:
+::2:	)
 ::2:	:: When CopyToNAS is active only full backups are supported.
 ::2:	SET AutodeskInstallLocation=C:\Program Files\Autodesk
 ::2:	SET Vault=Vault,Settings
@@ -1402,7 +1511,7 @@ exit /b 0
 ::2:	SET RunSQLMaintenance=Yes
 ::2:.
 ::2:	::===== SCHEDULE =====
-::2:	:: Day of week. 1 = monday, 7 = sunday
+::2:	:: Day of week. 0 = sunday, 1 = monday ..... 6 = saturday
 ::2:	:: Week of Month. 1 to 5
 ::2:	:: Month. 1 = Januari, 12 = December
 ::2:.
@@ -1420,15 +1529,15 @@ exit /b 0
 ::2:.
 ::2:	SET DefragmentOnMonth=1,2,3,4,5,6,7,8,9,10,11,12
 ::2:	SET DefragmentOnWeek=1,2,3,4,5,6
-::2:	SET DefragmentOnDay=7
+::2:	SET DefragmentOnDay=0
 ::2:.
 ::2:	SET B2BMigrationOnMonth=1,2,3,4,5,6,7,8,9,10,11,12
 ::2:	SET B2BMigrationOnWeek=1,2,3,4,5,6
-::2:	SET B2BMigrationOnDay=7
+::2:	SET B2BMigrationOnDay=0
 ::2:.
 ::2:	SET SQLMaintenanceOnMonth=1,2,3,4,5,6,7,8,9,10,11,12
 ::2:	SET SQLMaintenanceOnWeek=1,2,3,4,5,6
-::2:	SET SQLMaintenanceOnDay=7
+::2:	SET SQLMaintenanceOnDay=0
 ::2:.
 ::2:	::===== NOTIFICATIONS =====
 ::2:.
@@ -1454,11 +1563,13 @@ exit /b 0
 ::2:	SET SrvPort=587
 ::2:	SET UseSSL=Yes
 ::2:	SET SvrUser=USER
-::2:	SET SvrPass=PASSWORD
+::2:	SET "SvrPass=PASSWORD"
 ::2:	SET EMailFrom=from@domain.com
 ::2:	SET EmailToSuccess=succes@domain.com
 ::2:	SET EmailToFail=fail@domain.com
 ::2:	:: Multiple email adresses are possible. Comma separated, no space.
+::2:	SET Attachment=Yes
+::2:	:: "Yes" sends logs in the mail as attachment. "No" sends the logs in the email body.
 ::2:.
 ::2:	::=======================================================================================================================================================================================================
 ::2:	::=======================================================================================================================================================================================================
@@ -1553,11 +1664,23 @@ exit /b 0
 ::3:	)
 ::3:.
 ::3:	SET SubjectTest=Vault Notifications test
+::3:	SET AttachmentTest=This is the content of an attachment
+::3:	ECHO %AttachmentTest%>>test.txt
 ::3:	SET BodyTest=Hello world
-::3:.
+::3:	ECHO %BodyTest%>>tempbody.txt
+::3:	ECHO ^<br /^>>>tempbody.txt
+::3:	FOR /F "tokens=* delims=" %%x in (test.txt) DO (ECHO %%x >> tempbody.txt) > nul 2> nul
 ::3:	if "%EnableMail%"=="Yes" (
-::3:		"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub "%SubjectTest%" /b "%BodyTest%" \html
+::3:		if "%Attachment%"=="Yes" (
+::3:			"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /a "%CD%/test.txt" /sub "%SubjectTest%" /b "%BodyTest%" /html
+::3:		)
+::3:		if "%Attachment%"=="No" (
+::3:			"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub "%SubjectTest%" /btxt "%CD%/tempbody.txt" /html
+::3:		)
 ::3:	)
+::3:.	
+::3:	del tempbody.txt
+::3:	del test.txt
 ::3:.
 ::3:	call :SendNotification "%BodyTest%" "%SubjectTest%" "Information"
 ::3:.
