@@ -1639,7 +1639,7 @@ exit /b 0
 ::3:	TITLE Cadac Group B.V. - Vault Notifications test script
 ::3:	setlocal enabledelayedexpansion
 ::3:	SET BackupSettings=BackupSettings.bat
-::3:	SET SwithMail=%CD%\SwithMail.exe
+::3:	SET "SwithMail=%CD%\SwithMail.exe"
 ::3:.
 ::3:	:: Check admin
 ::3:	call :BatchGotAdmin
