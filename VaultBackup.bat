@@ -64,6 +64,8 @@
 ::					- Added mount share as drive for CopyToNAS
 ::					- Fixed DayOfWeek (Sunday is 0, not 1)
 
+:: Version 1.0.14 - By Wouter Breedveld, Cadac Group B.V., 18-08-2020
+::					- Added backup to VHD Drive. (This is the new default)
 
 
 
@@ -87,7 +89,7 @@ setlocal enabledelayedexpansion
 ECHO Please wait...
 for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 set HostName=%host:~2%
-SET scriptversion=1.0.13
+SET scriptversion=1.0.14
 SET "SwithMail=%CD%\SwithMail.exe"
 SET BackupSettings=BackupSettings.bat
 
@@ -126,6 +128,14 @@ SET ScriptLogFolder="%LogLocation%\Script"
 IF NOT EXIST %ScriptLogFolder% (mkdir %ScriptLogFolder%)
 SET ScriptLog="%LogLocation%\Script\ScriptLog !fullstampstart!.txt"
 BREAK>%ScriptLog%
+SET VerboseLogFolder="%LogLocation%\VerboseLog"
+IF NOT EXIST %VerboseLogFolder% (mkdir %VerboseLogFolder%)
+SET VerboseLog="%LogLocation%\VerboseLog\VerboseLog !fullstampstart!.txt"
+BREAK>%VerboseLog%
+:: Mount NAS as drive
+if "%CopyToNAS%"=="Yes" (
+	net use %NASPath% %NASLocation% /user:%NASUser% %NASPassword%
+)
 
 if "%InstallNotepadPlus%"=="Yes" (
 	call :InstallNotepad
@@ -234,26 +244,26 @@ IF not exist %BackUpNew% (mkdir %BackUpNew%)
 :: Download SQL Maintenance Solution
 IF not exist "%CD%\MaintenanceSolution.sql" (
 	call :getTime now & ECHO [!now!] - MaintenanceSolution.sql does not exist. Downloading... & ECHO [!now!] - MaintenanceSolution.sql does not exist. Downloading...>>%ScriptLog%
-	curl https://raw.githubusercontent.com/olahallengren/sql-server-maintenance-solution/master/MaintenanceSolution.sql --output "%CD%\MaintenanceSolution.sql" > nul 2> nul
-	sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -i MaintenanceSolution.sql > nul 2> nul
+	curl https://raw.githubusercontent.com/olahallengren/sql-server-maintenance-solution/master/MaintenanceSolution.sql --output "%CD%\MaintenanceSolution.sql" >>%VerboseLog% 2>nul
+	sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -i MaintenanceSolution.sql >>%VerboseLog% 2>nul
 )
 
 :: Download SwithMail
 IF not exist %SwithMail% (
 	call :getTime now & ECHO [!now!] - SwithMail.exe does not exist. Downloading version 2.2.4.0... & ECHO [!now!] - SwithMail.exe does not exist. Downloading version 2.2.4.0...>>%ScriptLog%
-	curl "https://raw.githubusercontent.com/Womabre/vault-backup-script/master/SwithMail.exe" --output "%CD%\SwithMail.exe" > nul 2> nul
-	curl "https://raw.githubusercontent.com/Womabre/vault-backup-script/master/SwithMailreadme.txt" --output "%CD%\SwithMail Readme.txt" > nul 2> nul
+	curl "https://raw.githubusercontent.com/Womabre/vault-backup-script/master/SwithMail.exe" --output "%CD%\SwithMail.exe" >>%VerboseLog% 2>nul
+	curl "https://raw.githubusercontent.com/Womabre/vault-backup-script/master/SwithMailreadme.txt" --output "%CD%\SwithMail Readme.txt" >>%VerboseLog% 2>nul
 )
 
 :: Export sys info
 if not exist %SysInfo% (
 	call :getTime now & ECHO [!now!] - System info file does not exist. Exporting... & ECHO [!now!] - System info file does not exist. Exporting...>>%ScriptLog%
-	msinfo32 /nfo %SysInfo% > nul 2> nul
+	msinfo32 /nfo %SysInfo% >>%VerboseLog% 2>nul
 )
 
 :: Check recovery mode KnowledgeVaultMaster
 sqlcmd -S %HostName%\AUTODESKVAULT %SQLAuth% -Q "SELECT DATABASEPROPERTYEX('KnowledgeVaultMaster', 'Recovery');" > RecoveryMode.txt
-findstr /m /C:"SIMPLE" RecoveryMode.txt > nul 2> nul
+findstr /m /C:"SIMPLE" RecoveryMode.txt >>%VerboseLog% 2>nul
 IF %errorlevel% EQU 1 (
 	call :getTime now & ECHO [!now!] - Recovery mode of KnowledgeVaultMaster not set to SIMPLE. Changing... & ECHO [!now!] - Recovery mode of KnowledgeVaultMaster not set to SIMPLE. Changing...>>%ScriptLog%
 	sqlcmd -S %HostName%\AUTODESKVAULT %SQLAuth% -Q "ALTER DATABASE KnowledgeVaultMaster SET RECOVERY SIMPLE"
@@ -261,7 +271,7 @@ IF %errorlevel% EQU 1 (
 del RecoveryMode.txt
 
 if exist %VaultSettings% ( del %VaultSettings% )
-call :ExportSettings > nul 2> nul
+call :ExportSettings >>%VerboseLog% 2>nul
 call :SetSchedule
 call :KillADMS
 
@@ -274,9 +284,14 @@ SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup failed<br /^>There 
 
 IF NOT "%BackupType%"=="None" (
 	:: Check if enough free space is available
+	call :getTime now & ECHO [!now!] - Checking if there is enough free space on %BackUpDrive% & ECHO [!now!] - Checking if there is enough free space on %BackUpDrive%>>%ScriptLog%
 	CALL :folderSize size "%VaultLocation%" "/S"
-	
-	IF %sizeGb%+1 GEQ %freeBackUpDrive% (
+)
+
+IF NOT "%BackupType%"=="None" (
+	SET /A VHDDriveSize=%sizeMb%+%sizeMb%+10000
+
+	IF %sizeGb%+5 GEQ %freeBackUpDrive% (
 		call :getTime now & ECHO [!now!] - %Red%Failed. Not enough free space on %BackUpDrive%%White% & ECHO [!now!] - Failed. Not enough free space on %BackUpDrive%>>%ScriptLog%
 		if "%EnableMail%"=="Yes" (
 			"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectFail% /b %BodyFail% /html
@@ -294,10 +309,12 @@ IF NOT "%BackupType%"=="None" (
 	:: Check if there is a backup present
 	call :getTime now & ECHO [!now!] - Checking if a current backup is present & ECHO [!now!] - Checking if a current backup is present>>%ScriptLog%
 	setlocal enabledelayedexpansion
-	for /f %%a in ('dir /b /s /ad %BackUpNew%^|find /c /v "" ') do SET count=%%a
+	for /f %%a in ('dir /b /s %BackUpNew%^|find /c /v "" ') do SET count=%%a
 	IF "!count!"=="0" (
 		SET BackupType=Full
 		call :getTime now & ECHO [!now!] - No backup is present. Creating Full backup & ECHO [!now!] - No backup is present. Creating Full backup>>%ScriptLog%
+	) else (
+		call :getTime now & ECHO [!now!] - A current backup is present. & ECHO [!now!] - A current backup is present.>>%ScriptLog%
 	)
 )
 
@@ -322,15 +339,15 @@ IF NOT "%BackupType%"=="None" (
 		BREAK>%SQLIntegrityCheckLog%
 		for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 		set HostName=%host:~2%
-		sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.DatabaseIntegrityCheck @Databases = 'USER_DATABASES'" -b -o %SQLIntegrityCheckLog% > nul 2> nul
-		sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.DatabaseIntegrityCheck @Databases = 'SYSTEM_DATABASES'" -b -o %SQLIntegrityCheckLog% > nul 2> nul
+		sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.DatabaseIntegrityCheck @Databases = 'USER_DATABASES'" -b -o %SQLIntegrityCheckLog% >>%VerboseLog% 2>nul
+		sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.DatabaseIntegrityCheck @Databases = 'SYSTEM_DATABASES'" -b -o %SQLIntegrityCheckLog% >>%VerboseLog% 2>nul
 		:: Set time SQL Maintenance finished
 		FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 		SET "fullstampendSQLIntergity=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
 	)
 	call :reset_error
-	findstr /m /C:"%CheckStringSQL%" %SQLIntegrityCheckLog% > nul 2> nul
+	findstr /m /C:"%CheckStringSQL%" %SQLIntegrityCheckLog% >>%VerboseLog% 2>nul
 	IF NOT "%ServerConfig%"=="VaultOnly" (
 		IF %errorlevel% EQU 1 (
 			call :getTime now & ECHO [!now!] - %Green%SQL Integrity finished successfully%White% & ECHO [!now!] - SQL Integrity finished successfully>>%ScriptLog%
@@ -349,23 +366,52 @@ IF NOT "%BackupType%"=="None" (
 IF "%BackupType%"=="Full" (
 	call :ResetServices
 	call :getTime now & ECHO [!now!] - Creating a new Full backup and deleting the old if successful & ECHO [!now!] - Creating a new Full backup and deleting the old if successful>>%ScriptLog%
-	IF exist %BackUpNew% ( MOVE /Y %BackUpNew% %BackUpOld% > nul 2> nul )
+	IF exist %BackUpNew% ( MOVE /Y %BackUpNew% %BackUpOld% >>%VerboseLog% 2>nul )
 	IF not exist %BackUpNew% (mkdir %BackUpNew%)
 	call :getTime now & ECHO [!now!] - Now creating full backup on local machine & ECHO [!now!] - Now creating full backup on local machine>>%ScriptLog%
-	%ADSKDM% -Obackup -B%BackUpNew% %VaultAuth%%VaultOpt% -S -L%Log% > nul 2> nul
+	IF "%UseVHDforBackup%"=="Yes" (	
+		ECHO create vdisk file="%BackupRootPath%\Backup\Scheduled Backup\Vault\VaultBackup.vhdx" type=expandable maximum=%VHDDriveSize%>>%AttachScript%
+		ECHO select vdisk file="%BackupRootPath%\Backup\Scheduled Backup\Vault\VaultBackup.vhdx">>%AttachScript%
+		ECHO attach vdisk>>%AttachScript%
+		ECHO convert gpt>>%AttachScript%
+		ECHO create partition primary>>%AttachScript%
+		ECHO format fs=ntfs label="VaultBackup" quick>>%AttachScript%
+		ECHO assign letter=%VHDDrive%>>%AttachScript%
+		ECHO exit>>%AttachScript%
+		diskpart /s "%AttachScript%" >>%VerboseLog% 2>nul
+		del %AttachScript%
+		%ADSKDM% -Obackup -B"%VHDDrive%\" %VaultAuth%%VaultOpt% -S -L%Log% >>%VerboseLog% 2>nul
+	) ELSE (
+		%ADSKDM% -Obackup -B%BackUpNew% %VaultAuth%%VaultOpt% -S -L%Log% >>%VerboseLog% 2>nul
+	)
 	:: Set time backup finished
 	FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 	SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 	SET "fullstampendbackup=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
 	:: Copy WebConfig
 	call :getTime now & ECHO [!now!] - Backing up Web.Config & ECHO [!now!] - Backing up Web.Config>>%ScriptLog%
-	COPY /Y %WebConfig% %BackUpNew%\Web.Config > nul 2> nul
+	IF "%UseVHDforBackup%"=="Yes" (
+		COPY /Y %WebConfig% "%VHDDrive%\Web.Config" >>%VerboseLog% 2>nul
+	) ELSE (
+		COPY /Y %WebConfig% %BackUpNew%\Web.Config >>%VerboseLog% 2>nul
+	)
 	call :getTime now & ECHO [!now!] - Done backing up Web.Config & ECHO [!now!] - Done backing up Web.Config>>%ScriptLog%
 	GOTO :Check1
 )
 IF "%BackupType%"=="Incremental" (
 	call :getTime now & ECHO [!now!] - Now creating incremental backup on local machine & ECHO [!now!] - Now creating incremental backup on local machine>>%ScriptLog%
-	%ADSKDM% -Obackup -B%BackUpNew% %VaultAuth%%VaultOpt% -INC -S -L%Log% > nul 2> nul
+	IF "%UseVHDforBackup%"=="Yes" (
+		SET AttachScript="%CD%\AttachScript.txt"
+		ECHO select vdisk file="%BackupRootPath%\Backup\Scheduled Backup\Vault\VaultBackup.vhdx">>%AttachScript%
+		ECHO attach vdisk>>%AttachScript%
+		ECHO assign letter=%VHDDrive%>>%AttachScript%
+		ECHO exit>>%AttachScript%
+		diskpart /s "%AttachScript%" >>%VerboseLog% 2>nul
+		del %AttachScript%
+		%ADSKDM% -Obackup -B"%VHDDrive%\" %VaultAuth%%VaultOpt% -INC -S -L%Log% >>%VerboseLog% 2>nul
+	) ELSE (
+		%ADSKDM% -Obackup -B%BackUpNew% %VaultAuth%%VaultOpt% -INC -S -L%Log% >>%VerboseLog% 2>nul
+	)
 	:: Set time backup finished
 	FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 	SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
@@ -382,7 +428,7 @@ IF "%BackupType%"=="None" (
 :: Check if backup is successful
 :Check1
 call :reset_error
-findstr /m /C:"%CheckString%" %Log% > nul 2> nul
+findstr /m /C:"%CheckString%" %Log% >>%VerboseLog% 2>nul
 IF %errorlevel% EQU 0 (
 	SET successbool=1
 	call :getTime now & ECHO [!now!] - %Green%Successfully finished backup operations%White% & ECHO [!now!] - Successfully finished backup operations>>%ScriptLog%
@@ -393,7 +439,7 @@ IF %errorlevel% EQU 0 (
 
 :Check2
 call :reset_error
-findstr /m /C:"%CheckString2%" %Log% > nul 2> nul
+findstr /m /C:"%CheckString2%" %Log% >>%VerboseLog% 2>nul
 IF %errorlevel% EQU 0 (
 	SET successbool=1
 	call :getTime now & ECHO [!now!] - %Green%Successfully finished backup operations%White% & ECHO [!now!] - Successfully finished backup operations>>%ScriptLog%
@@ -404,7 +450,7 @@ IF %errorlevel% EQU 0 (
 
 :Check3
 call :reset_error
-findstr /m /C:"%CheckString3%" %Log% > nul 2> nul
+findstr /m /C:"%CheckString3%" %Log% >>%VerboseLog% 2>nul
 IF %errorlevel% EQU 0 (
 	call :getTime now & ECHO [!now!] - %Red%Failed creating incremental backup. A Vault or Library has been added or removed. Creating full backup.%White% & ECHO [!now!] - Failed creating incremental backup. A Vault or Library has been added or removed. Creating full backup.>>%ScriptLog%
 	SET BackupType=Full
@@ -423,18 +469,23 @@ IF %errorlevel% EQU 0 (
 	IF NOT "%ServerConfig%"=="VaultOnly" (
 		call :getTime now & ECHO [!now!] - Running SQL Backup. Backup system databases. & ECHO [!now!] - Running SQL Backup. Backup system databases.>>%ScriptLog%
 		IF NOT EXIST %SQLBackupLogFolder% (mkdir %SQLBackupLogFolder%)
-		IF not exist %BackUpSQL2% (mkdir %BackUpSQL2%)
 		BREAK>%SQLBackupLog%	
 		for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 		set HostName=%host:~2%
-		sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.DatabaseBackup @Databases = 'SYSTEM_DATABASES', @BackupType = 'FULL', @Directory = %BackUpSQL%" -b -o %SQLBackupLog% > nul 2> nul
+		IF "%UseVHDforBackup%"=="Yes" (
+			IF not exist "%VHDDrive%\SQL System Databases" (mkdir "%VHDDrive%\SQL System Databases")
+			sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.DatabaseBackup @Databases = 'SYSTEM_DATABASES', @BackupType = 'FULL', @Directory = '%VHDDrive%\SQL System Databases'" -b -o %SQLBackupLog% >>%VerboseLog% 2>nul
+		) ELSE (
+			IF not exist %BackUpSQL2% (mkdir %BackUpSQL2%)
+			sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.DatabaseBackup @Databases = 'SYSTEM_DATABASES', @BackupType = 'FULL', @Directory = %BackUpSQL%" -b -o %SQLBackupLog% >>%VerboseLog% 2>nul
+		)
 		:: Set time SQL Maintenance finished
 		FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 		SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 		SET "fullstampendSQLbackup=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
 	)
 	call :reset_error
-	findstr /m /C:"%CheckStringSQL%" %SQLBackupLog% > nul 2> nul
+	findstr /m /C:"%CheckStringSQL%" %SQLBackupLog% >>%VerboseLog% 2>nul
 	IF NOT "%ServerConfig%"=="VaultOnly" (
 		IF %errorlevel% EQU 1 (
 			SET successbool=1
@@ -454,7 +505,7 @@ IF %errorlevel% EQU 0 (
 			call :getTime now & ECHO [!now!] - Validating the Vault & ECHO [!now!] - Validating the Vault>>%ScriptLog%
 			IF NOT EXIST %ValidateLogFolder% (mkdir %ValidateLogFolder%)
 			BREAK>%ValidateLog%
-			%ADSKDM% -Ovalidatefilestore %VaultAuth% -S -L%ValidateLog% > nul 2> nul
+			%ADSKDM% -Ovalidatefilestore %VaultAuth% -S -L%ValidateLog% >>%VerboseLog% 2>nul
 			:: Set time Validation finished
 			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
@@ -466,7 +517,7 @@ IF %errorlevel% EQU 0 (
 		)
 	)
 	call :reset_error
-	findstr /m /C:"%CheckStringValidate%" %ValidateLog% > nul 2> nul
+	findstr /m /C:"%CheckStringValidate%" %ValidateLog% >>%VerboseLog% 2>nul
 	IF NOT "%ServerConfig%"=="SQLOnly" (
 		IF %errorlevel% EQU 1 (
 			SET successbool=1
@@ -487,7 +538,7 @@ IF %errorlevel% EQU 0 (
 			IF NOT EXIST %DefragLogFolder% (mkdir %DefragLogFolder%)
 			BREAK>%DefragLog%
 			for %%i in (%Vault%) do (
-				%ADSKDM% -Odefragmentvault -N%%i %VaultAuth% -S -L%DefragLog% > nul 2> nul
+				%ADSKDM% -Odefragmentvault -N%%i %VaultAuth% -S -L%DefragLog% >>%VerboseLog% 2>nul
 			)
 			:: Set time Defrag finished
 			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
@@ -500,7 +551,7 @@ IF %errorlevel% EQU 0 (
 		)
 	)
 	call :reset_error
-	findstr /m /C:"%CheckStringDefrag%" %DefragLog% > nul 2> nul
+	findstr /m /C:"%CheckStringDefrag%" %DefragLog% >>%VerboseLog% 2>nul
 	IF NOT "%ServerConfig%"=="SQLOnly" (	
 		IF %errorlevel% EQU 0 (
 			SET successbool=1
@@ -520,7 +571,7 @@ IF %errorlevel% EQU 0 (
 			call :getTime now & ECHO [!now!] - Running B2BMigration to improve performance & ECHO [!now!] - Running B2BMigration to improve performance>>%ScriptLog%
 			IF NOT EXIST %B2BMigrateLogFolder% (mkdir %B2BMigrateLogFolder%)
 			BREAK>%B2BMigrateLog%
-			%ADSKDM% -Ob2bmigrate %VaultAuth% -S -L%B2BMigrateLog% > nul 2> nul
+			%ADSKDM% -Ob2bmigrate %VaultAuth% -S -L%B2BMigrateLog% >>%VerboseLog% 2>nul
 			:: Set time B2BMigration finished
 			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
@@ -532,7 +583,7 @@ IF %errorlevel% EQU 0 (
 		)
 	)
 	call :reset_error
-	findstr /m /C:"%CheckStringMigrate%" %B2BMigrateLog% > nul 2> nul
+	findstr /m /C:"%CheckStringMigrate%" %B2BMigrateLog% >>%VerboseLog% 2>nul
 	IF NOT "%ServerConfig%"=="SQLOnly" (
 		IF %errorlevel% EQU 0 (
 			SET successbool=1
@@ -554,9 +605,7 @@ IF %errorlevel% EQU 0 (
 			BREAK>%SQLMaintenanceLog%
 			for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 			set HostName=%host:~2%
-			sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.IndexOptimize @Databases = 'USER_DATABASES'" -b -o %SQLMaintenanceLog% > nul 2> nul
-			sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.DatabaseBackup @Databases = 'SYSTEM_DATABASES', @BackupType = 'FULL', @Directory = '%BackUpNew%'" -b -o %SQLMaintenanceLog% > nul 2> nul
-
+			sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -Q "EXECUTE dbo.IndexOptimize @Databases = 'USER_DATABASES'" -b -o %SQLMaintenanceLog% >>%VerboseLog% 2>nul
 			:: Set time SQL Maintenance finished
 			FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 			SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
@@ -568,7 +617,7 @@ IF %errorlevel% EQU 0 (
 		)
 	)
 	call :reset_error
-	findstr /m /C:"%CheckStringSQL%" %SQLMaintenanceLog% > nul 2> nul
+	findstr /m /C:"%CheckStringSQL%" %SQLMaintenanceLog% >>%VerboseLog% 2>nul
 	IF NOT "%ServerConfig%"=="VaultOnly" (
 		IF %errorlevel% EQU 1 (
 			SET successbool=1
@@ -583,6 +632,14 @@ IF %errorlevel% EQU 0 (
 	)
 	
 :CopyToNAS
+	IF "%UseVHDforBackup%"=="Yes" (
+		ECHO select vdisk file="%BackupRootPath%\Backup\Scheduled Backup\Vault\VaultBackup.vhdx">>%DetachScript%
+		ECHO detach vdisk>>%DetachScript%
+		ECHO compact vdisk>>%DetachScript%
+		ECHO exit>>%DetachScript%
+		diskpart /s "%DetachScript%" >>%VerboseLog% 2>nul
+		del %DetachScript%
+	)
 	IF "%BackupType%"=="Full" (
 		IF "%CopyToNAS%"=="Yes" (
 			IF NOT EXIST %CopyToNASLogFolder% (mkdir %CopyToNASLogFolder%)
@@ -889,19 +946,19 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	SET findfile="software_list.txt"
 	
 	call :reset_error	
-	findstr /R /C:\""Autodesk Vault Professional .... (Server)"\" %findfile% > nul 2> nul
+	findstr /R /C:\""Autodesk Vault Professional .... (Server)"\" %findfile% >>%VerboseLog% 2>nul
 	IF %errorlevel% EQU 0 (
 		SET VT=Professional
 		GOTO :Continue
 	)
 	call :reset_error
-	findstr /R /C:\""Autodesk Vault Workgroup .... (Server)"\" %findfile% > nul 2> nul
+	findstr /R /C:\""Autodesk Vault Workgroup .... (Server)"\" %findfile% >>%VerboseLog% 2>nul
 	IF %errorlevel% EQU 0 (
 		SET VT=Workgroup
 		GOTO :Continue
 	)
 	call :reset_error
-	findstr /R /C:\""Autodesk Vault Basic .... (Server)"\" %findfile% > nul 2> nul
+	findstr /R /C:\""Autodesk Vault Basic .... (Server)"\" %findfile% >>%VerboseLog% 2>nul
 	IF %errorlevel% EQU 0 (
 		SET VT=Basic
 		GOTO :Continue
@@ -942,7 +999,7 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	setlocal enabledelayedexpansion
 	call :getTime now
 	ECHO [!now!] - Closing ADMS Console if open & ECHO [!now!] - Closing ADMS Console if open>>%ScriptLog%
-	taskkill /F /IM Connectivity.ADMSConsole.exe > nul 2> nul
+	taskkill /F /IM Connectivity.ADMSConsole.exe >>%VerboseLog% 2>nul
 	IF %errorlevel% NEQ 0 (
 		call :getTime now
 		ECHO [!now!] - Successfully closed running ADMS Console & ECHO [!now!] - Successfully closed running ADMS Console>>%ScriptLog%
@@ -1014,6 +1071,8 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	SET White=%ESC%[37m
 	SET ThisFile="%CD%\%~n0%~x0"
 	FOR %%? IN (%ThisFile%) DO SET filedate=%%~t?
+	SET AttachScript="%CD%\AttachScript.txt"
+	SET DetachScript="%CD%\DetachScript.txt"
 	exit /b
 	
 :getDiskspace <outFree> <outSize> <inDrive>
@@ -1036,21 +1095,21 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 	:: Reset services
 	call :getTime now
 	ECHO [!now!] - Cycling Autodesk Data Management Job Dispatch & ECHO [!now!] - Cycling Autodesk Data Management Job Dispatch>>%ScriptLog%
-	NET STOP "Autodesk Data Management Job Dispatch" > nul 2> nul
-	NET START "Autodesk Data Management Job Dispatch" > nul 2> nul
+	NET STOP "Autodesk Data Management Job Dispatch" >>%VerboseLog% 2>nul
+	NET START "Autodesk Data Management Job Dispatch" >>%VerboseLog% 2>nul
 	
 	call :getTime now
 	ECHO [!now!] - Cycling SQL Services & ECHO [!now!] - Cycling SQL Services>>%ScriptLog%
-	NET STOP "SQLBrowser" > nul 2> nul
-	NET STOP "SQLAgent$%VaultDatabaseInstance%" > nul 2> nul
-	NET STOP "MSSQL$%VaultDatabaseInstance%" > nul 2> nul
-	NET START "MSSQL$%VaultDatabaseInstance%" > nul 2> nul
-	NET START "SQLAgent$%VaultDatabaseInstance%" > nul 2> nul
-	NET START "SQLBrowser" > nul 2> nul
+	NET STOP "SQLBrowser" >>%VerboseLog% 2>nul
+	NET STOP "SQLAgent$%VaultDatabaseInstance%" >>%VerboseLog% 2>nul
+	NET STOP "MSSQL$%VaultDatabaseInstance%" >>%VerboseLog% 2>nul
+	NET START "MSSQL$%VaultDatabaseInstance%" >>%VerboseLog% 2>nul
+	NET START "SQLAgent$%VaultDatabaseInstance%" >>%VerboseLog% 2>nul
+	NET START "SQLBrowser" >>%VerboseLog% 2>nul
 	
 	call :getTime now
 	ECHO [!now!] - Cycling IIS & ECHO [!now!] - Cycling IIS>>%ScriptLog%
-	iisreset /restart > nul 2> nul
+	iisreset /restart >>%VerboseLog% 2>nul
 	(
 		exit /b
 	)
@@ -1128,14 +1187,7 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 :: Function to calculate the size of a directory and its subdirectories
 ::----------------------------------------------------------------------
 :folderSize <returnVariableName> <folder> [DIR parameters]
-	CALL :strNumDivide sizeKb %size% 1024
-	CALL :strNumDivide sizeMb %sizeKb% 1024
-	CALL :strNumDivide sizeGb %sizeMb% 1024
-	CALL :formatNumber size %size%
-	CALL :formatNumber sizeKb %sizeKb%
-	CALL :formatNumber sizeMb %sizeMb%
-	CALL :formatNumber sizeGb %sizeGb%
-
+	
     SetLocal EnableExtensions EnableDelayedExpansion
 
     SET folder=%2
@@ -1165,9 +1217,12 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 
     DEL %TEMP%\folderSize.tmp > nul
 
-    EndLocal & SET "%~1=%size%"
+    endlocal & SET "%~1=%size%"
+	CALL :strNumDivide sizeKb %size% 1024
+	CALL :strNumDivide sizeMb %sizeKb% 1024
+	CALL :strNumDivide sizeGb %sizeMb% 1024
 
-GOTO:EOF
+	GOTO:EOF
 
 
 
@@ -1198,47 +1253,12 @@ GOTO:EOF
             )
         )
     )
+	SET result=!result:,=.!
+	SET result=!result:.=!
 
     IF NOT DEFINED result SET "result=0"
     EndLocal & SET "%~1=%result%"
-
-GOTO:EOF
-
-
-:formatNumber <returnVariableName> <number> [separator [group size]] 
-    SetLocal EnableExtensions EnableDelayedExpansion 
-    SET "raw=%~2"
-    SET "separator=%~3" 
-    SET "group=%~4" 
-    SET "answer=" 
-    IF NOT DEFINED raw GOTO :EOF
-    IF NOT DEFINED separator SET "separator=."
-    IF NOT DEFINED group SET "group=3"
-
-    FOR %%g IN (-%group%) DO (
-        FOR /F "tokens=1,2 delims=,." %%a IN ("%raw%") DO ( 
-            SET int=%%a
-            SET frac=%%b
-
-            FOR /F "delims=:" %%c IN ('^(ECHO;!int!^& Echo.NEXT LINE^)^|FindStr /O "NEXT LINE"') DO (
-                SET /A length=%%c-3
-            ) 
-
-            FOR %%c IN (!length!) DO ( 
-                SET radix=!raw:~%%c,1!
-            )
-
-            FOR /L %%i IN (!length!, %%g, 1) DO ( 
-                SET answer=!int:~%%g!!separator!!answer! 
-                SET int=!int:~0,%%g!
-            ) 
-        ) 
-    )
-    SET answer=%answer: =%
-    SET answer=%answer:~0,-1%
-
-    EndLocal & SET "%~1=%answer%%radix%%frac%" 
-	Goto :EOF
+	GOTO:EOF
 
 :: Checks if curl is installed. If not, download chocolatey package manager to install latest version of curl.
 :checkCURL
@@ -1312,9 +1332,9 @@ GOTO:EOF
 :SendNotification <Message> <Title> <Icon>
 	if "%EnableTelegram%"=="Yes" (
 		endlocal
-		curl -s -X POST https://api.telegram.org/bot%TelegramToken%/sendMessage -d chat_id=%TelegramChatID% -d text="%~1" > nul 2> nul
-		curl -s -X POST https://api.telegram.org/bot%TelegramToken%/sendDocument -F chat_id=%TelegramChatID% -F caption="Script Log" -F document=@%ScriptLog% > nul 2> nul
-		curl -s -X POST https://api.telegram.org/bot%TelegramToken%/sendDocument -F chat_id=%TelegramChatID% -F caption="Backup Log" -F document=@%Log% > nul 2> nul
+		curl -s -X POST https://api.telegram.org/bot%TelegramToken%/sendMessage -d chat_id=%TelegramChatID% -d text="%~1" >>%VerboseLog% 2>nul
+		curl -s -X POST https://api.telegram.org/bot%TelegramToken%/sendDocument -F chat_id=%TelegramChatID% -F caption="Script Log" -F document=@%ScriptLog% >>%VerboseLog% 2>nul
+		curl -s -X POST https://api.telegram.org/bot%TelegramToken%/sendDocument -F chat_id=%TelegramChatID% -F caption="Backup Log" -F document=@%Log% >>%VerboseLog% 2>nul
 		setlocal enabledelayedexpansion
 	)
 	if "%EnablePushOver%"=="Yes" (
@@ -1328,7 +1348,7 @@ GOTO:EOF
 		Set WinMessage=%~1
 		::You can replace the WinIcon value by Information, error, warning and none
 		Set WinIcon=%~3
-		EVENTCREATE /T %~3 /L APPLICATION /so "%~2" /ID 100 /D "%~1" > nul 2> nul
+		EVENTCREATE /T %~3 /L APPLICATION /so "%~2" /ID 100 /D "%~1" >>%VerboseLog% 2>nul
 		call :WinNot
 		setlocal enabledelayedexpansion
 	)
@@ -1485,12 +1505,18 @@ exit /b 0
 ::2:	SET BackUpDrive=C:
 ::2:	SET BackupRootPath=C:\ADMS
 ::2:	SET VaultLocation=C:\ADMS\FileStore
-::2:	SET CopyToNAS=No
-::2:	if "%CopyToNAS%"=="Yes" (
-::2:		net use Y: \\NAS\somewhere /user:USERNAME PASSWORD
-::2:		SET NASPath=Y:
-::2:	)
+::2:.
+::2:	:: Use of VHD dramatically improves copying and moving performance.
+::2:	SET UseVHDforBackup=Yes
+::2:	SET VHDDrive=V:
+::2:.
 ::2:	:: When CopyToNAS is active only full backups are supported.
+::2:	SET CopyToNAS=No
+::2:	SET NASLocation=\\NAS\somewhere
+::2:	SET NASPath=Y:
+::2:	SET "NASUser=USERNAME"
+::2:	SET "NASPassword=PASSWORD"
+::2:.
 ::2:	SET AutodeskInstallLocation=C:\Program Files\Autodesk
 ::2:	SET Vault=Vault,Settings
 ::2:	:: All vaults comma separated
@@ -1614,7 +1640,7 @@ exit /b 0
 	:: be sure download.exe is present in the directory where update.bat runs.
 	:: be sure to add " set local=2.0 " in your remote link.
 	:updater-download
-		curl %updatelink% --output %CD%\version.bat > nul 2> nul
+		curl %updatelink% --output %CD%\version.bat >>%VerboseLog% 2>nul
 		CALL version.bat
 		SET local=!local:.=!
 		goto updater-check-2
@@ -1625,12 +1651,12 @@ exit /b 0
 		IF %local% GTR %localtwo% goto :updater-yes
 
 	:updater-no
-		DEL /Q %CD%\version.bat > nul 2> nul
+		DEL /Q %CD%\version.bat >>%VerboseLog% 2>nul
 		exit /b
 		
 	:updater-yes
-		DEL /Q %CD%\version.bat > nul 2> nul
-		curl %downloadlink% --output %CD%\VaultBackup.bat > nul 2> nul
+		DEL /Q %CD%\version.bat >>%VerboseLog% 2>nul
+		curl %downloadlink% --output %CD%\VaultBackup.bat >>%VerboseLog% 2>nul
 		call :SendNotification "%CompanyName% Vault Backup Script has been updated!" "Autodesk Vault %VaultType% %VaultVersion%" "Information"
 		exit /b
 		
