@@ -67,6 +67,8 @@
 :: Version 1.0.14 - By Wouter Breedveld, Cadac Group B.V., 18-08-2020
 ::					- Added backup to VHD Drive. (This is the new default)
 
+:: Version 1.0.15 - By Wouter Breedveld, Cadac Group B.V., 05-09-2020
+::					- Fixed incorrect calc of foldersize.
 
 
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
@@ -89,7 +91,7 @@ setlocal enabledelayedexpansion
 ECHO Please wait...
 for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 set HostName=%host:~2%
-SET scriptversion=1.0.14
+SET scriptversion=1.0.15
 SET "SwithMail=%CD%\SwithMail.exe"
 SET BackupSettings=BackupSettings.bat
 
@@ -289,9 +291,13 @@ IF NOT "%BackupType%"=="None" (
 )
 
 IF NOT "%BackupType%"=="None" (
+	SET /A SizeGB5=%sizeGb%+5
+)
+
+IF NOT "%BackupType%"=="None" (
 	SET /A VHDDriveSize=%sizeMb%+%sizeMb%+10000
 
-	IF %sizeGb%+5 GEQ %freeBackUpDrive% (
+	IF %sizeGb5% GEQ %freeBackUpDrive% (
 		call :getTime now & ECHO [!now!] - %Red%Failed. Not enough free space on %BackUpDrive%%White% & ECHO [!now!] - Failed. Not enough free space on %BackUpDrive%>>%ScriptLog%
 		if "%EnableMail%"=="Yes" (
 			"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectFail% /b %BodyFail% /html
