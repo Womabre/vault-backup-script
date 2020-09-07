@@ -70,6 +70,8 @@
 :: Version 1.0.15 - By Wouter Breedveld, Cadac Group B.V., 05-09-2020
 ::					- Fixed incorrect calc of foldersize.
 
+:: Version 1.0.16 - By Wouter Breedveld, Cadac Group B.V., 07-09-2020
+::					- Added date to timestamp in log.
 
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
 
@@ -91,7 +93,7 @@ setlocal enabledelayedexpansion
 ECHO Please wait...
 for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 set HostName=%host:~2%
-SET scriptversion=1.0.15
+SET scriptversion=1.0.16
 SET "SwithMail=%CD%\SwithMail.exe"
 SET BackupSettings=BackupSettings.bat
 
@@ -123,6 +125,7 @@ SET "Start=%TIME%"
 FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 SET "YY=%dt:~2,2%" & SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 SET "datestampstart=%YYYY%%MM%%DD%" & SET "timestampstart=%HH%%Min%%Sec%" & SET "fullstampstart=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
+SET "DayStart=%DD%"
 
 :: Console Log
 SET "LogLocation=%BackupRootPath%\Backup\Logs"
@@ -703,18 +706,23 @@ IF %errorlevel% EQU 0 (
 	)
 
 :Close
-set "End=%TIME%"
+SET "End=%TIME%"
+FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
+SET "YY=%dt:~2,2%" & SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
+SET "DayEnd=%DD%"
+SET /A DayDiff=%DayEnd%-%DayStart%
 call :timediff Elapsed Start End
+SET "Elapsed=%DayDiff%:%Elapsed%"
 
 IF "%BackupType%"=="None" (
 	SET SubjectSuccess="Vault operations successful"
 ) ELSE (
 	SET SubjectSuccess="Vault backup successful - %fullstampendbackup%"
 )
-SET BodySuccess="Hi,<br /^><br /^>Attached is the log file of the Vault backup.<br /^>Operations started: %fullstampstart%<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished: !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Validation finished: !fullstampendvalidate!<br /^>Defragmentation finished: !fullstampenddefrag!<br /^>B2BMigration finished: !fullstampendB2B!<br /^>SQLMaintenance finished: !fullstampendSQL!<br /^>Deleting old backup from NAS finished: !fullstampenddelnas!<br /^>Moving new backup to NAS finished: !fullstampendmove!<br /^>Deleting local backup finished: !fullstampenddellocal!<br /^>Duration: %Elapsed:~0,8%<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
+SET BodySuccess="Hi,<br /^><br /^>Attached is the log file of the Vault backup.<br /^>Operations started: %fullstampstart%<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished: !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Validation finished: !fullstampendvalidate!<br /^>Defragmentation finished: !fullstampenddefrag!<br /^>B2BMigration finished: !fullstampendB2B!<br /^>SQLMaintenance finished: !fullstampendSQL!<br /^>Deleting old backup from NAS finished: !fullstampenddelnas!<br /^>Moving new backup to NAS finished: !fullstampendmove!<br /^>Deleting local backup finished: !fullstampenddellocal!<br /^>Duration: %Elapsed:~0,10%<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
 
 SET SubjectFail="WARNING Vault backup has failed - %fullstampendbackup%"
-SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup has failed.<br /^>Attached is the log file of the Vault backup.<br /^>Backup started !fullstampstart!<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Duration: %Elapsed:~0,8%<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
+SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup has failed.<br /^>Attached is the log file of the Vault backup.<br /^>Backup started !fullstampstart!<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Duration: %Elapsed:~0,10%<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
 
 SET SubjectError="WARNING Vault backup has errors - %fullstampendbackup%"
 
@@ -930,9 +938,12 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 
     :: Adjust the hour part of the time string
     set /a "h=100%h%+%p%"
+	
+	FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
+	SET "YY=%dt:~2,2%" & SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 
     :: Clean up and return the new time string
-    endlocal & if not "%~1"=="" set "%~1=%h:~-2%:%m:~-2%:%s:~-2%,%c:~-2%" & exit /b
+    endlocal & if not "%~1"=="" set "%~1=%YYYY%-%MM%-%DD% - %h:~-2%:%m:~-2%:%s:~-2%,%c:~-2%" & exit /b
 	
 	
 :getVaultVersion <VaultVersion> <VaultType>
