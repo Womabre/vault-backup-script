@@ -125,7 +125,8 @@ SET "Start=%TIME%"
 FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 SET "YY=%dt:~2,2%" & SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 SET "datestampstart=%YYYY%%MM%%DD%" & SET "timestampstart=%HH%%Min%%Sec%" & SET "fullstampstart=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
-SET "DayStart=%DD%"
+FOR /F "tokens=* delims=0" %%A IN ("%DD%") DO SET DayStart=%%A
+IF "%DayStart%"=="" SET DayStart=0
 
 :: Console Log
 SET "LogLocation=%BackupRootPath%\Backup\Logs"
@@ -293,9 +294,7 @@ IF NOT "%BackupType%"=="None" (
 	CALL :folderSize size "%VaultLocation%" "/S"
 )
 
-IF NOT "%BackupType%"=="None" (
-	SET /A SizeGB5=%sizeGb%+5
-)
+SET /A SizeGB5=%sizeGb%+5
 
 IF NOT "%BackupType%"=="None" (
 	SET /A VHDDriveSize=%sizeMb%+%sizeMb%+10000
@@ -709,20 +708,23 @@ IF %errorlevel% EQU 0 (
 SET "End=%TIME%"
 FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 SET "YY=%dt:~2,2%" & SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
-SET "DayEnd=%DD%"
+
+FOR /F "tokens=* delims=0" %%A IN ("%DD%") DO SET DayEnd=%%A
+IF "%DayEnd%"=="" SET DayEnd=0
+
 SET /A DayDiff=%DayEnd%-%DayStart%
 call :timediff Elapsed Start End
-SET "Elapsed=%DayDiff%:%Elapsed%"
+SET "ElapsedTime=%DayDiff%:%Elapsed:~0,8%"
 
 IF "%BackupType%"=="None" (
 	SET SubjectSuccess="Vault operations successful"
 ) ELSE (
 	SET SubjectSuccess="Vault backup successful - %fullstampendbackup%"
 )
-SET BodySuccess="Hi,<br /^><br /^>Attached is the log file of the Vault backup.<br /^>Operations started: %fullstampstart%<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished: !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Validation finished: !fullstampendvalidate!<br /^>Defragmentation finished: !fullstampenddefrag!<br /^>B2BMigration finished: !fullstampendB2B!<br /^>SQLMaintenance finished: !fullstampendSQL!<br /^>Deleting old backup from NAS finished: !fullstampenddelnas!<br /^>Moving new backup to NAS finished: !fullstampendmove!<br /^>Deleting local backup finished: !fullstampenddellocal!<br /^>Duration: %Elapsed:~0,10%<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
+SET BodySuccess="Hi,<br /^><br /^>Attached is the log file of the Vault backup.<br /^>Operations started: %fullstampstart%<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished: !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Validation finished: !fullstampendvalidate!<br /^>Defragmentation finished: !fullstampenddefrag!<br /^>B2BMigration finished: !fullstampendB2B!<br /^>SQLMaintenance finished: !fullstampendSQL!<br /^>Deleting old backup from NAS finished: !fullstampenddelnas!<br /^>Moving new backup to NAS finished: !fullstampendmove!<br /^>Deleting local backup finished: !fullstampenddellocal!<br /^>Duration: %ElapsedTime%<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
 
 SET SubjectFail="WARNING Vault backup has failed - %fullstampendbackup%"
-SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup has failed.<br /^>Attached is the log file of the Vault backup.<br /^>Backup started !fullstampstart!<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Duration: %Elapsed:~0,10%<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
+SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup has failed.<br /^>Attached is the log file of the Vault backup.<br /^>Backup started !fullstampstart!<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Duration: %ElapsedTime%<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
 
 SET SubjectError="WARNING Vault backup has errors - %fullstampendbackup%"
 
@@ -787,7 +789,7 @@ IF %successbool% EQU 1 (
 	set "End=%TIME%"
 	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - %Green%Success%White% & ECHO [!now!] - Success>>%ScriptLog%
-	call :getTime now & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
+	call :getTime now & ECHO [!now!] - Total Elapsed Time: !ElapsedTime! & ECHO [!now!] - Total Elapsed Time: !ElapsedTime!>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Sending logfile to emailaddress & ECHO [!now!] - Sending logfile to emailaddress>>%ScriptLog%
 	IF "%BackupType%"=="None" (
 		if "%EnableMail%"=="Yes" (
@@ -820,7 +822,7 @@ IF %successbool% EQU 0 (
 	set "End=%TIME%"
 	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - %Red%Failed%White% & ECHO [!now!] - Failed >>%ScriptLog%
-	call :getTime now & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
+	call :getTime now & ECHO [!now!] - Total Elapsed Time: !ElapsedTime! & ECHO [!now!] - Total Elapsed Time: !ElapsedTime!>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Sending logfile to emailaddress & ECHO [!now!] - Sending logfile to emailaddress>>%ScriptLog%
 	IF "%BackupType%"=="None" (
 		if "%EnableMail%"=="Yes" (
@@ -853,7 +855,7 @@ IF %successbool% EQU 2 (
 	set "End=%TIME%"
 	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - %Red%There are errors. Check logs.%White% & ECHO [!now!] - There are errors. Check logs. >>%ScriptLog%
-	call :getTime now & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8! & ECHO [!now!] - Total Elapsed Time: !Elapsed:~0,8!>>%ScriptLog%
+	call :getTime now & ECHO [!now!] - Total Elapsed Time: !ElapsedTime! & ECHO [!now!] - Total Elapsed Time: !ElapsedTime!>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Sending logfile to emailaddress & ECHO [!now!] - Sending logfile to emailaddress>>%ScriptLog%
 	IF "%BackupType%"=="None" (
 		if "%EnableMail%"=="Yes" (
