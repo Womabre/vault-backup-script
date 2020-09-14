@@ -73,6 +73,9 @@
 :: Version 1.0.16 - By Wouter Breedveld, Cadac Group B.V., 07-09-2020
 ::					- Added date to timestamp in log.
 
+:: Version 1.0.17 - By Wouter Breedveld, Cadac Group B.V., 07-09-2020
+::					-  Fixed time elapsed calc
+
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
 
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
@@ -93,7 +96,7 @@ setlocal enabledelayedexpansion
 ECHO Please wait...
 for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 set HostName=%host:~2%
-SET scriptversion=1.0.16
+SET scriptversion=1.0.17
 SET "SwithMail=%CD%\SwithMail.exe"
 SET BackupSettings=BackupSettings.bat
 
@@ -120,13 +123,9 @@ IF NOT EXIST "BackupSettings.bat" (
 )
 
 :: Get date and time
-SET "TIME="
-SET "Start=%TIME%"
 FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
 SET "YY=%dt:~2,2%" & SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
 SET "datestampstart=%YYYY%%MM%%DD%" & SET "timestampstart=%HH%%Min%%Sec%" & SET "fullstampstart=!YYYY!-!MM!-!DD! !HH!.!Min!.!Sec!"
-FOR /F "tokens=* delims=0" %%A IN ("%DD%") DO SET DayStart=%%A
-IF "%DayStart%"=="" SET DayStart=0
 
 :: Console Log
 SET "LogLocation=%BackupRootPath%\Backup\Logs"
@@ -151,6 +150,7 @@ call :Initilization
 call :DisableQuickedit
 call :Authentication
 call :BackupOptions
+call :getTime2 Start
 call :getVaultVersion VaultVersion VaultType
 if %VaultVersion% LEQ 2020 (
 	SET ADSKDM="%AutodeskInstallLocation%\ADMS %VaultType% %VaultVersion%\ADMS Console\Connectivity.ADMSConsole.exe"
@@ -705,26 +705,20 @@ IF %errorlevel% EQU 0 (
 	)
 
 :Close
-SET "End=%TIME%"
-FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
-SET "YY=%dt:~2,2%" & SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
-
-FOR /F "tokens=* delims=0" %%A IN ("%DD%") DO SET DayEnd=%%A
-IF "%DayEnd%"=="" SET DayEnd=0
-
-SET /A DayDiff=%DayEnd%-%DayStart%
+call :getTime2 End
+echo %Start%
+echo %End%
 call :timediff Elapsed Start End
-SET "ElapsedTime=%DayDiff%:%Elapsed:~0,8%"
 
 IF "%BackupType%"=="None" (
 	SET SubjectSuccess="Vault operations successful"
 ) ELSE (
 	SET SubjectSuccess="Vault backup successful - %fullstampendbackup%"
 )
-SET BodySuccess="Hi,<br /^><br /^>Attached is the log file of the Vault backup.<br /^>Operations started: %fullstampstart%<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished: !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Validation finished: !fullstampendvalidate!<br /^>Defragmentation finished: !fullstampenddefrag!<br /^>B2BMigration finished: !fullstampendB2B!<br /^>SQLMaintenance finished: !fullstampendSQL!<br /^>Deleting old backup from NAS finished: !fullstampenddelnas!<br /^>Moving new backup to NAS finished: !fullstampendmove!<br /^>Deleting local backup finished: !fullstampenddellocal!<br /^>Duration: %ElapsedTime%<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
+SET BodySuccess="Hi,<br /^><br /^>Attached is the log file of the Vault backup.<br /^>Operations started: %fullstampstart%<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished: !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Validation finished: !fullstampendvalidate!<br /^>Defragmentation finished: !fullstampenddefrag!<br /^>B2BMigration finished: !fullstampendB2B!<br /^>SQLMaintenance finished: !fullstampendSQL!<br /^>Deleting old backup from NAS finished: !fullstampenddelnas!<br /^>Moving new backup to NAS finished: !fullstampendmove!<br /^>Deleting local backup finished: !fullstampenddellocal!<br /^>Duration: !Elapsed!<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
 
 SET SubjectFail="WARNING Vault backup has failed - %fullstampendbackup%"
-SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup has failed.<br /^>Attached is the log file of the Vault backup.<br /^>Backup started !fullstampstart!<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Duration: %ElapsedTime%<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
+SET BodyFail="Hi,<br /^><br /^>Unfortunatly the Vault backup has failed.<br /^>Attached is the log file of the Vault backup.<br /^>Backup started !fullstampstart!<br /^>SQL Integrity Check finished: !fullstampendSQLIntergity!<br /^>Backup finished !fullstampendbackup!<br /^>SQL backup finished: !fullstampendSQLbackup!<br /^>Duration: !Elapsed!<br /^><br /^>Kind Regards,<br /^><br /^>%CompanyName% Vault %VaultType% %VaultVersion% Server<br /^><br /^>Remember to eat healthy, get enough sleep and backup your computer"
 
 SET SubjectError="WARNING Vault backup has errors - %fullstampendbackup%"
 
@@ -786,10 +780,8 @@ IF NOT "%BackupType%"=="None" (
 )
 
 IF %successbool% EQU 1 (
-	set "End=%TIME%"
-	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - %Green%Success%White% & ECHO [!now!] - Success>>%ScriptLog%
-	call :getTime now & ECHO [!now!] - Total Elapsed Time: !ElapsedTime! & ECHO [!now!] - Total Elapsed Time: !ElapsedTime!>>%ScriptLog%
+	call :getTime now & ECHO [!now!] - Total Elapsed Time: !Elapsed! & ECHO [!now!] - Total Elapsed Time: !Elapsed!>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Sending logfile to emailaddress & ECHO [!now!] - Sending logfile to emailaddress>>%ScriptLog%
 	IF "%BackupType%"=="None" (
 		if "%EnableMail%"=="Yes" (
@@ -819,10 +811,8 @@ IF %successbool% EQU 1 (
 )
 
 IF %successbool% EQU 0 (
-	set "End=%TIME%"
-	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - %Red%Failed%White% & ECHO [!now!] - Failed >>%ScriptLog%
-	call :getTime now & ECHO [!now!] - Total Elapsed Time: !ElapsedTime! & ECHO [!now!] - Total Elapsed Time: !ElapsedTime!>>%ScriptLog%
+	call :getTime now & ECHO [!now!] - Total Elapsed Time: !Elapsed! & ECHO [!now!] - Total Elapsed Time: !Elapsed!>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Sending logfile to emailaddress & ECHO [!now!] - Sending logfile to emailaddress>>%ScriptLog%
 	IF "%BackupType%"=="None" (
 		if "%EnableMail%"=="Yes" (
@@ -852,10 +842,8 @@ IF %successbool% EQU 0 (
 )
 
 IF %successbool% EQU 2 (
-	set "End=%TIME%"
-	call :timediff Elapsed Start End
 	call :getTime now & ECHO [!now!] - %Red%There are errors. Check logs.%White% & ECHO [!now!] - There are errors. Check logs. >>%ScriptLog%
-	call :getTime now & ECHO [!now!] - Total Elapsed Time: !ElapsedTime! & ECHO [!now!] - Total Elapsed Time: !ElapsedTime!>>%ScriptLog%
+	call :getTime now & ECHO [!now!] - Total Elapsed Time: !Elapsed! & ECHO [!now!] - Total Elapsed Time: !Elapsed!>>%ScriptLog%
 	call :getTime now & ECHO [!now!] - Sending logfile to emailaddress & ECHO [!now!] - Sending logfile to emailaddress>>%ScriptLog%
 	IF "%BackupType%"=="None" (
 		if "%EnableMail%"=="Yes" (
@@ -885,28 +873,11 @@ IF %successbool% EQU 2 (
 )
 
 :timediff <outDiff> <inStartTime> <inEndTime>
-(
     setlocal EnableDelayedExpansion
-    set "Input=!%~2! !%~3!"
-    for /F "tokens=1,3 delims=0123456789 " %%A in ("!Input!") do set "time.delims=%%A%%B "
-)
-for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
-    for %%A in ("@h1=%%a" "@m1=%%b" "@s1=%%c" "@c1=%%d" "@h2=%%e" "@m2=%%f" "@s2=%%g" "@c2=%%h") do (
-        for /F "tokens=1,2 delims==" %%A in ("%%~A") do (
-            for /F "tokens=* delims=0" %%B in ("%%B") do set "%%A=%%B"
-        )
-    )
-    set /a "@d=(@h2-@h1)*360000+(@m2-@m1)*6000+(@s2-@s1)*100+(@c2-@c1), @sign=(@d>>31)&1, @d+=(@sign*24*360000), @h=(@d/360000), @d%%=360000, @m=@d/6000, @d%%=6000, @s=@d/100, @c=@d%%100"
-)
-(
-    if %@h% LEQ 9 set "@h=0%@h%"
-    if %@m% LEQ 9 set "@m=0%@m%"
-    if %@s% LEQ 9 set "@s=0%@s%"
-    if %@c% LEQ 9 set "@c=0%@c%"
-)
+	FOR /F "tokens=* delims==" %%F IN ('PowerShell -NoProfile -ExecutionPolicy Bypass -Command "((Get-Date '!%~3!') - (Get-Date '!%~2!')).ToString()"') DO @SET Output=%%F
 (
     endlocal
-    set "%~1=%@h%%time.delims:~0,1%%@m%%time.delims:~0,1%%@s%%time.delims:~1,1%%@c%"
+	if not "%~1"=="" set "%~1=%Output%"
     exit /b
 )
 
@@ -946,6 +917,39 @@ for /F "tokens=1-8 delims=%time.delims%" %%a in ("%Input%") do (
 
     :: Clean up and return the new time string
     endlocal & if not "%~1"=="" set "%~1=%YYYY%-%MM%-%DD% - %h:~-2%:%m:~-2%:%s:~-2%,%c:~-2%" & exit /b
+	
+:getTime2 returnVar [time]
+    setlocal enableextensions disabledelayedexpansion
+
+    :: Retrieve parameters if present. Else take current time
+    if "%~2"=="" ( set "t=%time%" ) else ( set "t=%~2" )
+
+    :: Test if time contains "correct" (usual) data. Else try something else
+    echo(%t%|findstr /i /r /x /c:"[0-9:,.apm -]*" >nul || ( 
+        set "t="
+        for /f "tokens=2" %%a in ('2^>nul robocopy "|" . /njh') do (
+            if not defined t set "t=%%a,00"
+        )
+        rem If we do not have a valid time string, leave
+        if not defined t exit /b
+    )
+
+    :: Check if 24h time adjust is needed
+    if not "%t:pm=%"=="%t%" (set "p=12" ) else (set "p=0")
+
+    :: Separate the elements of the time string
+    for /f "tokens=1-5 delims=:.,-PpAaMm " %%a in ("%t%") do (
+        set "h=%%a" & set "m=00%%b" & set "s=00%%c" & set "c=00%%d" 
+    )
+
+    :: Adjust the hour part of the time string
+    set /a "h=100%h%+%p%"
+	
+	FOR /f "tokens=2 delims==" %%a IN ('wmic OS Get localdatetime /value') DO SET "dt=%%a"
+	SET "YY=%dt:~2,2%" & SET "YYYY=!dt:~0,4!" & SET "MM=!dt:~4,2!" & SET "DD=!dt:~6,2!" & SET "HH=!dt:~8,2!" & SET "Min=!dt:~10,2!" & SET "Sec=!dt:~12,2!"
+
+    :: Clean up and return the new time string
+    endlocal & if not "%~1"=="" set "%~1=%YYYY%-%MM%-%DD% %h:~-2%:%m:~-2%:%s:~-2%" & exit /b
 	
 	
 :getVaultVersion <VaultVersion> <VaultType>
