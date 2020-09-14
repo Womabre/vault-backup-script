@@ -706,8 +706,6 @@ IF %errorlevel% EQU 0 (
 
 :Close
 call :getTime2 End
-echo %Start%
-echo %End%
 call :timediff Elapsed Start End
 
 IF "%BackupType%"=="None" (
