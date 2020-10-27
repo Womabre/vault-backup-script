@@ -76,6 +76,12 @@
 :: Version 1.0.17 - By Wouter Breedveld, Cadac Group B.V., 07-09-2020
 ::					-  Fixed time elapsed calc
 
+:: Version 1.0.18 - By Wouter Breedveld, Cadac Group B.V., 27-10-2020
+::					-  Fixed typo
+::					-  Fixed Diskspace calc for 32-bit systems.
+::					-  Added Extra Vault Authentication SET as test
+
+
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
 
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
@@ -96,7 +102,7 @@ setlocal enabledelayedexpansion
 ECHO Please wait...
 for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 set HostName=%host:~2%
-SET scriptversion=1.0.17
+SET scriptversion=1.0.18
 SET "SwithMail=%CD%\SwithMail.exe"
 SET BackupSettings=BackupSettings.bat
 
@@ -148,6 +154,8 @@ if "%InstallNotepadPlus%"=="Yes" (
 
 call :Initilization
 call :DisableQuickedit
+:: Extra Vault Authentication SET
+SET VaultAuth=-VU"%BackupUser%" -VP"%BackupPassword%"
 call :Authentication
 call :BackupOptions
 call :getTime2 Start
@@ -1103,8 +1111,14 @@ IF %successbool% EQU 2 (
 	)
 	FOR /F "tokens=2 delims==" %%S IN ('wmic /NODE:"%COMPUTERNAME%" LogicalDisk Where ^(DriveType^="3" and DeviceID^="!%~3!"^) Get FreeSpace /VALUE') DO @SET output1=%%S
 	FOR /F "tokens=2 delims==" %%S IN ('wmic /NODE:"%COMPUTERNAME%" LogicalDisk Where ^(DriveType^="3" and DeviceID^="!%~3!"^) Get Size /VALUE') DO @SET output2=%%S
-	SET /a temp1=%output1:~0,-4%/1048576
-	SET /a temp2=%output2:~0,-4%/1048576
+	IF "%PROCESSOR_ARCHITECTURE%" EQU "amd64" (
+		SET /a temp1=%output1:~0,-4%/1048576
+		SET /a temp2=%output2:~0,-4%/1048576
+	) ELSE (
+		SET /a temp1=%output1:~0,-6%/10485
+		SET /a temp2=%output2:~0,-6%/10485
+	)
+
 	(
 		endlocal
 		SET %~1=%temp1%
@@ -1551,7 +1565,7 @@ exit /b 0
 ::2:	SET BackupPassword=backup
 ::2:	SET BackupStandardContentCenter=No
 ::2:.
-::2:	:: Extra fucntions
+::2:	:: Extra functions
 ::2:	SET RunValidation=Yes
 ::2:	SET RunDefragmentation=Yes
 ::2:	SET RunB2BMigration=No
