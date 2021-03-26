@@ -1,1 +1,1 @@
-SET local=1.0.18
+SET local=1.0.19
