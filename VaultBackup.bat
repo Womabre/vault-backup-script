@@ -74,16 +74,17 @@
 ::					- Added date to timestamp in log.
 
 :: Version 1.0.17 - By Wouter Breedveld, Cadac Group B.V., 07-09-2020
-::					-  Fixed time elapsed calc
+::					- Fixed time elapsed calc
 
 :: Version 1.0.18 - By Wouter Breedveld, Cadac Group B.V., 27-10-2020
-::					-  Fixed typo
-::					-  Fixed Diskspace calc for 32-bit systems.
-::					-  Added Extra Vault Authentication SET as test
+::					- Fixed typo
+::					- Fixed Diskspace calc for 32-bit systems.
+::					- Added Extra Vault Authentication SET as test
 	
 :: Version 1.0.19 - By Wouter Breedveld, Cadac Group B.V., 26-03-2021
-::					-  Improved CURL check.
-::					-  Freespace calculation now in MB instead of GB.
+::					- Improved CURL check.
+::					- Freespace calculation now in MB instead of GB.
+::					- Improved SQL Maintenance Check.
 	
 
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
