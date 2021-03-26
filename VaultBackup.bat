@@ -263,8 +263,18 @@ IF not exist %BackUpNew% (mkdir %BackUpNew%)
 IF not exist "%CD%\MaintenanceSolution.sql" (
 	call :getTime now & ECHO [!now!] - MaintenanceSolution.sql does not exist. Downloading... & ECHO [!now!] - MaintenanceSolution.sql does not exist. Downloading...>>%ScriptLog%
 	curl https://raw.githubusercontent.com/olahallengren/sql-server-maintenance-solution/master/MaintenanceSolution.sql --output "%CD%\MaintenanceSolution.sql" >>%VerboseLog% 2>nul
-	sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -i MaintenanceSolution.sql >>%VerboseLog% 2>nul
 )
+	
+IF not exist "%CD%\MaintenanceSolution.txt" (
+	sqlcmd -S %HostName%\%VaultDatabaseInstance% %SQLAuth% -i MaintenanceSolution.sql >>%VerboseLog% 2>nul
+	IF %errorlevel% EQU 0 (
+		ECHO SQL Maintenance Solution Installed Successfully>>%CD%\MaintenanceSolution.txt
+	) ELSE (
+		ECHO SQL Maintenance Solution Installation failed! Please check!
+		pause
+		exit
+	)
+)	
 
 :: Download SwithMail
 IF not exist %SwithMail% (
