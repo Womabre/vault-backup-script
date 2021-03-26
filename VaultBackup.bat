@@ -80,7 +80,11 @@
 ::					-  Fixed typo
 ::					-  Fixed Diskspace calc for 32-bit systems.
 ::					-  Added Extra Vault Authentication SET as test
-
+	
+:: Version 1.0.19 - By Wouter Breedveld, Cadac Group B.V., 26-03-2021
+::					-  Improved CURL check.
+::					-  Freespace calculation now in MB instead of GB.
+	
 
 :: DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT! - DANGER ZONE - DO NOT EDIT!
 
@@ -102,7 +106,7 @@ setlocal enabledelayedexpansion
 ECHO Please wait...
 for /f "tokens=1-2 delims=:" %%a in ('ipconfig /all^|find "Host Name"') do set host==%%b
 set HostName=%host:~2%
-SET scriptversion=1.0.18
+SET scriptversion=1.0.19
 SET "SwithMail=%CD%\SwithMail.exe"
 SET BackupSettings=BackupSettings.bat
 
@@ -302,12 +306,12 @@ IF NOT "%BackupType%"=="None" (
 	CALL :folderSize size "%VaultLocation%" "/S"
 )
 
-SET /A SizeGB5=%sizeGb%+5
+SET /A SizeMb5000=%sizeMb%+5000
 
 IF NOT "%BackupType%"=="None" (
 	SET /A VHDDriveSize=%sizeMb%+%sizeMb%+10000
 
-	IF %sizeGb5% GEQ %freeBackUpDrive% (
+	IF %sizeMb5000% GEQ %freeBackUpDrive% (
 		call :getTime now & ECHO [!now!] - %Red%Failed. Not enough free space on %BackUpDrive%%White% & ECHO [!now!] - Failed. Not enough free space on %BackUpDrive%>>%ScriptLog%
 		if "%EnableMail%"=="Yes" (
 			"%SwithMail%" /s /from "%EMailFrom%" /name "%CompanyName% Vault %VaultType% %VaultVersion% Server" /u "%SvrUser%" /pass "%SvrPass%" /server "%ExchSvr%" /p "%SrvPort%" %SSL% /to "%EmailToFail%" /sub %SubjectFail% /b %BodyFail% /html
@@ -385,7 +389,8 @@ IF "%BackupType%"=="Full" (
 	IF exist %BackUpNew% ( MOVE /Y %BackUpNew% %BackUpOld% >>%VerboseLog% 2>nul )
 	IF not exist %BackUpNew% (mkdir %BackUpNew%)
 	call :getTime now & ECHO [!now!] - Now creating full backup on local machine & ECHO [!now!] - Now creating full backup on local machine>>%ScriptLog%
-	IF "%UseVHDforBackup%"=="Yes" (	
+	IF "%UseVHDforBackup%"=="Yes" (
+		SET AttachScript="%CD%\AttachScript.txt"	
 		ECHO create vdisk file="%BackupRootPath%\Backup\Scheduled Backup\Vault\VaultBackup.vhdx" type=expandable maximum=%VHDDriveSize%>>%AttachScript%
 		ECHO select vdisk file="%BackupRootPath%\Backup\Scheduled Backup\Vault\VaultBackup.vhdx">>%AttachScript%
 		ECHO attach vdisk>>%AttachScript%
@@ -1112,11 +1117,13 @@ IF %successbool% EQU 2 (
 	FOR /F "tokens=2 delims==" %%S IN ('wmic /NODE:"%COMPUTERNAME%" LogicalDisk Where ^(DriveType^="3" and DeviceID^="!%~3!"^) Get FreeSpace /VALUE') DO @SET output1=%%S
 	FOR /F "tokens=2 delims==" %%S IN ('wmic /NODE:"%COMPUTERNAME%" LogicalDisk Where ^(DriveType^="3" and DeviceID^="!%~3!"^) Get Size /VALUE') DO @SET output2=%%S
 	IF "%PROCESSOR_ARCHITECTURE%" EQU "amd64" (
-		SET /a temp1=%output1:~0,-4%/1048576
-		SET /a temp2=%output2:~0,-4%/1048576
+		:: Divide factor MB to GB 1048576
+		SET /a temp1=%output1:~0,-4%
+		SET /a temp2=%output2:~0,-4%
 	) ELSE (
-		SET /a temp1=%output1:~0,-6%/10485
-		SET /a temp2=%output2:~0,-6%/10485
+		:: Divide factor MB to GB 10485
+		SET /a temp1=%output1:~0,-6%
+		SET /a temp2=%output2:~0,-6%
 	)
 
 	(
@@ -1249,7 +1256,9 @@ IF %successbool% EQU 2 (
 		SET size=!size:.=!
 
     )
-
+	
+	SET /A sizeGb=1
+	
     DEL %TEMP%\folderSize.tmp > nul
 
     endlocal & SET "%~1=%size%"
@@ -1297,18 +1306,20 @@ IF %successbool% EQU 2 (
 
 :: Checks if curl is installed. If not, download chocolatey package manager to install latest version of curl.
 :checkCURL
-	if "%EnablePushOver%"=="Yes" (
 		if not exist %SYSTEMROOT%\System32\curl.exe (
+			ECHO CURL is not installed! Trying to install.																																																										
 			if not exist %PROGRAMDATA%\chocolatey\choco.exe (
+				ECHO Chocolatey is not installed! This is necessary to install CURL. Installing...																																																																																																	
 				@"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
 				start "" "%~f0"
+				ECHO Please re-run the script. 
+				pause
 				exit
 			)
 			if not exist %PROGRAMDATA%\chocolatey\lib\curl (
 				choco install curl -y
 			)
 		)
-	)
 	(
 		exit /b
 	)
